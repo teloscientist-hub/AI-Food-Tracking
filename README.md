@@ -1,0 +1,159 @@
+# MML Food Tracking
+
+Local-first nutrition logging web app for a single user, built with FastAPI, SQLAlchemy, SQLite, Jinja templates, and pytest.
+
+## Features
+
+- Conversational logging for inputs like `2 eggs, 3 bacon, 1 Fairlife 42, 1 tbsp butter`
+- Resolution pipeline with strict priority:
+  1. exact alias lookup
+  2. exact custom food name lookup
+  3. fuzzy custom food or alias lookup
+  4. USDA FoodData Central
+  5. Open Food Facts fallback
+  6. unresolved confirmation or custom food creation
+- First-class custom foods with:
+  - manual creation
+  - editing through versioned updates
+  - aliases
+  - authoritative lock flag
+  - duplication from external foods
+  - historical nutrient snapshots preserved in logs
+- Summary-first dashboard with daily targets, weekly chart, streak, and status strip
+- Food library and custom food editor
+- Daily and weekly analytics
+
+## Stack
+
+- Python 3.12+
+- FastAPI
+- SQLAlchemy 2.x
+- SQLite
+- Jinja templates
+- HTMX-enhanced server-rendered UI
+- pytest
+
+## Project Structure
+
+```text
+app/
+  main.py
+  config.py
+  db.py
+  models/
+  schemas/
+  services/
+  routers/
+  templates/
+  static/
+tests/
+migrations/
+```
+
+## Schema Overview
+
+### `foods`
+
+Stores nutrient definitions for both custom and external foods. Custom foods are versioned by creating a new row and marking the old row as no longer current. Key fields:
+
+- `canonical_name`
+- `brand`
+- `source`
+- `source_food_id`
+- `serving_description`
+- `grams_per_serving`
+- `calories`
+- `protein_g`
+- `carbs_g`
+- `fat_g`
+- `fiber_g`
+- `net_carbs_g`
+- `raw_source_payload`
+- `food_group_key`
+- `version`
+- `is_current`
+- timestamps
+
+### `food_aliases`
+
+Exact alias mappings for fast resolution. Aliases can point to custom or external foods and are used first in the resolution order.
+
+### `custom_food_metadata`
+
+Custom-food-only metadata for authoritative lock state, notes, and the current version pointer.
+
+### `meal_entries`
+
+Stores the original raw entry text, meal label, and log timestamp.
+
+### `meal_entry_items`
+
+Stores parsed line items and the nutrient snapshot captured at time of entry, preserving history even if a food changes later.
+
+### `daily_targets`
+
+Daily macro and calorie targets used for dashboard remaining calculations.
+
+### `food_resolution_history`
+
+Audit trail of how phrases were resolved, whether confirmation happened, and whether a phrase was saved for future reuse.
+
+## Setup
+
+1. Create and activate a virtual environment.
+2. Install dependencies:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+3. Copy env settings:
+
+```bash
+cp .env.example .env
+```
+
+4. Add your USDA API key to `.env` if you want USDA lookups enabled.
+5. Run the app:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+6. Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+The app auto-creates the SQLite database and seeds demo foods on startup.
+
+## Test Instructions
+
+Run:
+
+```bash
+pytest
+```
+
+The test suite covers the parser and the resolution order logic with mocked external lookups.
+
+## API Endpoints
+
+- `POST /api/foods`
+- `PUT /api/foods/{food_id}`
+- `GET /api/foods/search`
+- `POST /api/foods/{food_id}/aliases`
+- `POST /api/foods/{food_id}/duplicate`
+- `POST /api/resolve`
+- `POST /api/logs`
+- `GET /api/summaries/daily`
+- `GET /api/summaries/weekly`
+- `GET /api/unresolved`
+
+## Deferred Enhancements
+
+- true unit conversion beyond serving-count assumptions
+- background caching for USDA and Open Food Facts results
+- authentication and multi-user support
+- Alembic migration history instead of startup `create_all`
+- richer charts with client-side interactivity
+

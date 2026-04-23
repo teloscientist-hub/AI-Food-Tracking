@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">Conversational logging</p>
+    <h2>Add Log Entry</h2>
+    <p class="subtle">Type a natural line, review ambiguous matches, or jump into saved foods when you want a picker-style flow.</p>
+  </div>
+  <a class="button outline" href="/foods">Browse foods</a>
+</section>
+<section class="grid two-up">
+  <article class="panel">
+    <form action="/log/review" method="post" class="stack">
+      <label>
+        <span>Entry text</span>
+        <textarea name="raw_input_text" rows="6" placeholder="2 eggs, 3 bacon, 1 Fairlife 42, 1 tbsp butter"></textarea>
+      </label>
+      <div class="form-grid">
+        <label>
+          <span>Meal label</span>
+          <input type="text" name="meal_label" value="Breakfast">
+        </label>
+        <label>
+          <span>Logged at</span>
+          <input type="datetime-local" name="logged_at" value="{{ today }}">
+        </label>
+      </div>
+      <div class="quick-chips">
+        {% for phrase in ["Fairlife 42", "protein coffee", "2 eggs", "ribeye", "yogurt bowl"] %}
+        <span class="chip">{{ phrase }}</span>
+        {% endfor %}
+      </div>
+      <button class="button primary" type="submit">Parse and review</button>
+    </form>
+  </article>
+  <article class="panel picker-preview">
+    <div class="panel-header">
+      <h3>Picker-style add</h3>
+      <span class="mini-link">Preview</span>
+    </div>
+    <div class="picker-search-shell">Search foods and servings...</div>
+    <div class="picker-preview-list">
+      {% for item in [
+        {"name": "Fairlife Core Power Elite 42g", "serving": "1 bottle", "net": "9g", "protein": "42g", "fat": "3.5g", "cals": "230", "tag": "My Food"},
+        {"name": "Protein Coffee", "serving": "1 mug", "net": "6g", "protein": "30g", "fat": "4g", "cals": "180", "tag": "My Recipe"},
+        {"name": "Egg", "serving": "1 egg", "net": "0.4g", "protein": "6g", "fat": "5g", "cals": "72", "tag": "Common"}
+      ] %}
+      <div class="picker-row">
+        <div class="picker-main">
+          <strong>{{ item.name }}</strong>
+          <span>{{ item.serving }}</span>
+          <small>{{ item.tag }}</small>
+        </div>
+        <div class="picker-macros">
+          <span class="coral-text">{{ item.net }}</span>
+          <span class="blue-text">{{ item.protein }}</span>
+          <span class="gold-text">{{ item.fat }}</span>
+          <strong>{{ item.cals }}</strong>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+{% endblock %}

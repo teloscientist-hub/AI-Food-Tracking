@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">Confirm matches</p>
+    <h2>Review Parsed Entry</h2>
+    <p class="subtle">{{ raw_input_text }}</p>
+  </div>
+</section>
+<section class="panel">
+  <form action="/log/submit" method="post" class="stack">
+    <input type="hidden" name="raw_input_text" value="{{ raw_input_text }}">
+    <input type="hidden" name="meal_label" value="{{ meal_label }}">
+    <input type="hidden" name="logged_at" value="{{ logged_at }}">
+    <input type="hidden" name="item_count" value="{{ review|length }}">
+    <input type="hidden" name="candidate_json" value="{{ candidate_json }}">
+    {% for item in review %}
+    <article class="review-card">
+      <div class="review-head">
+        <div>
+          <strong>{{ item.parsed_item.quantity }} {{ item.parsed_item.unit or "" }} {{ item.parsed_item.phrase }}</strong>
+          <div class="review-sub">Status: {{ item.status }}</div>
+        </div>
+        {% if item.chosen %}
+        <span class="chip active">{{ item.chosen.strategy }}</span>
+        {% endif %}
+      </div>
+      <input type="hidden" name="parsed_phrase_{{ loop.index0 }}" value="{{ item.parsed_item.phrase }}">
+      <input type="hidden" name="quantity_{{ loop.index0 }}" value="{{ item.parsed_item.quantity }}">
+      <input type="hidden" name="unit_{{ loop.index0 }}" value="{{ item.parsed_item.unit or '' }}">
+      <input type="hidden" name="quantity_text_{{ loop.index0 }}" value="{{ item.parsed_item.quantity_text or '' }}">
+      <label>
+        <span>Food match</span>
+        <select name="selected_food_id_{{ loop.index0 }}" required>
+          {% if not item.candidates %}
+          <option value="">Unresolved</option>
+          {% endif %}
+          {% for candidate in item.candidates %}
+          <option value="{% if candidate.food_id %}food:{{ candidate.food_id }}{% else %}external:{{ loop.index0 }}{% endif %}" {% if item.chosen and item.chosen.canonical_name == candidate.canonical_name %}selected{% endif %}>
+            {{ candidate.canonical_name }} {% if candidate.brand %}({{ candidate.brand }}){% endif %} - {{ candidate.source }} - confidence {{ "%.2f"|format(candidate.confidence) }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="inline">
+        <input type="checkbox" name="always_map_{{ loop.index0 }}" value="1">
+        <span>Always map this phrase in the future</span>
+      </label>
+      {% if item.status == "unresolved" or not item.candidates or (item.candidates and item.candidates[0].food_id is none) %}
+      <a class="button secondary" href="/foods/custom/new?prefill_phrase={{ item.parsed_item.phrase }}">Create custom food</a>
+      {% endif %}
+    </article>
+    {% endfor %}
+    <button class="button primary" type="submit">Save meal entry</button>
+  </form>
+</section>
+{% endblock %}

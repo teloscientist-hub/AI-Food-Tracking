@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">Weekly trends</p>
+    <h2>Last 7 days</h2>
+    <p class="subtle">Average calories {{ weekly.averages.calories }}, protein {{ weekly.averages.protein_g }}g, carbs {{ weekly.averages.carbs_g }}g, fat {{ weekly.averages.fat_g }}g.</p>
+  </div>
+</section>
+<section class="panel">
+  <div class="toggle-row">
+    {% for option in ["calories","protein","carbs","fat","fiber","net_carbs"] %}
+    <a class="chip {% if metric == option %}active{% endif %}" href="/weekly?metric={{ option }}">{{ option.replace("_"," ") }}</a>
+    {% endfor %}
+  </div>
+  <div class="mini-chart tall">
+    {% for day in weekly.days %}
+    {% set value = day[metric if metric == "calories" else metric + "_g"] %}
+    <div class="chart-col">
+      <div class="chart-bar-wrap">
+        <span class="chart-bar" style="height: {{ ((value / max_metric) * 100) if max_metric else 0 }}%"></span>
+      </div>
+      <strong>{{ value }}</strong>
+      <span>{{ day.day }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="grid two-up">
+    <article class="panel soft">
+      <h3>Adherence</h3>
+      <p>{{ weekly.adherence_days }} days on target this week.</p>
+    </article>
+    <article class="panel soft">
+      <h3>Top foods by protein</h3>
+      <ul class="plain-list">
+        {% for food in weekly.top_foods %}
+        <li>{{ food.name }}: {{ food.value }}</li>
+        {% else %}
+        <li>No data yet.</li>
+        {% endfor %}
+      </ul>
+    </article>
+  </div>
+</section>
+{% endblock %}
+

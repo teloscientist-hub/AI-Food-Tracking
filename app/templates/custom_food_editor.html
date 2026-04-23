@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">First-class custom foods</p>
+    <h2>{% if mode == "edit" %}Edit custom food{% else %}Create custom food{% endif %}</h2>
+    <p class="subtle">Edits create a new version so historical logs stay unchanged, while aliases and lock state keep your resolution behavior stable.</p>
+  </div>
+  {% if food %}
+  <a class="button outline" href="/foods/{{ food.id }}">View food page</a>
+  {% endif %}
+</section>
+<section class="grid two-up">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>{% if mode == "edit" %}Current nutrition{% else %}Preview{% endif %}</h3>
+      <span class="mini-link">{% if food and food.authoritative_locked %}locked{% else %}editable{% endif %}</span>
+    </div>
+    <div class="facts-meta">
+      <div><span>Name</span><strong>{{ food.canonical_name if food else prefill_phrase or "New custom food" }}</strong></div>
+      <div><span>Serving Size</span><strong>{{ food.serving_description if food else "1 serving" }}</strong></div>
+      <div><span>Serving Weight</span><strong>{{ food.grams_per_serving if food else 100 }}g</strong></div>
+      <div><span>Aliases</span><strong>{{ food.aliases|join(", ") if food and food.aliases else "None yet" }}</strong></div>
+    </div>
+    <div class="facts-table">
+      <div class="facts-head"><span>Nutrient</span><span>Value</span></div>
+      <div class="facts-row neutral"><span>Calories</span><strong>{{ food.calories if food else 0 }}</strong></div>
+      <div class="facts-row coral"><span>Total Carbs</span><strong>{{ food.carbs_g if food else 0 }}g</strong></div>
+      <div class="facts-row"><span class="sub-item">Net Carbs</span><strong>{{ food.net_carbs_g if food and food.net_carbs_g is not none else 0 }}g</strong></div>
+      <div class="facts-row"><span class="sub-item">Fiber</span><strong>{{ food.fiber_g if food and food.fiber_g is not none else 0 }}g</strong></div>
+      <div class="facts-row blue"><span>Protein</span><strong>{{ food.protein_g if food else 0 }}g</strong></div>
+      <div class="facts-row gold"><span>Fat</span><strong>{{ food.fat_g if food else 0 }}g</strong></div>
+    </div>
+  </article>
+  <article class="panel">
+    <form action="{% if mode == 'edit' %}/foods/{{ food.id }}/save{% else %}/foods/custom/save{% endif %}" method="post" class="stack">
+      <div class="form-grid">
+        <label><span>Name</span><input type="text" name="canonical_name" value="{{ food.canonical_name if food else prefill_phrase }}" required></label>
+        <label><span>Brand</span><input type="text" name="brand" value="{{ food.brand if food else '' }}"></label>
+        <label><span>Serving description</span><input type="text" name="serving_description" value="{{ food.serving_description if food else '1 serving' }}" required></label>
+        <label><span>Grams per serving</span><input type="number" step="0.01" name="grams_per_serving" value="{{ food.grams_per_serving if food else 100 }}" required></label>
+        <label><span>Calories</span><input type="number" step="0.01" name="calories" value="{{ food.calories if food else 0 }}" required></label>
+        <label><span>Protein</span><input type="number" step="0.01" name="protein_g" value="{{ food.protein_g if food else 0 }}" required></label>
+        <label><span>Carbs</span><input type="number" step="0.01" name="carbs_g" value="{{ food.carbs_g if food else 0 }}" required></label>
+        <label><span>Fat</span><input type="number" step="0.01" name="fat_g" value="{{ food.fat_g if food else 0 }}" required></label>
+        <label><span>Fiber</span><input type="number" step="0.01" name="fiber_g" value="{{ food.fiber_g if food and food.fiber_g is not none else '' }}"></label>
+        <label><span>Net carbs</span><input type="number" step="0.01" name="net_carbs_g" value="{{ food.net_carbs_g if food and food.net_carbs_g is not none else '' }}"></label>
+      </div>
+      <label><span>Aliases</span><input type="text" name="aliases" value="{{ food.aliases|join(', ') if food else prefill_phrase }}" placeholder="comma separated aliases"></label>
+      <label><span>Notes</span><textarea name="notes" rows="4">{{ food.notes if food else '' }}</textarea></label>
+      <label class="inline">
+        <input type="checkbox" name="authoritative_locked" value="true" {% if food and food.authoritative_locked %}checked{% endif %}>
+        <span>Lock as authoritative</span>
+      </label>
+      <button class="button primary" type="submit">{% if mode == "edit" %}Save new version{% else %}Create custom food{% endif %}</button>
+    </form>
+  </article>
+</section>
+{% endblock %}

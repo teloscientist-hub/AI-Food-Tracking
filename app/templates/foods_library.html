@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">All foods</p>
+    <h2>Foods Library</h2>
+    <p class="subtle">Search custom and external foods, manage aliases, and duplicate external foods into your custom catalog.</p>
+  </div>
+  <a class="button primary" href="/foods/custom/new">Create custom food</a>
+</section>
+<section class="panel">
+  <form method="get" class="picker-toolbar">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search foods and servings...">
+    <div class="toggle-row">
+      {% for option in ["all","custom","usda","openfoodfacts"] %}
+      <button class="chip {% if source == option %}active{% endif %}" type="submit" name="source" value="{{ option }}">{{ option }}</button>
+      {% endfor %}
+    </div>
+  </form>
+  <div class="quick-chips left">
+    {% for chip in ["Frequent for Breakfast", "Frequently Logged", "Previously Logged"] %}
+    <span class="chip {% if chip == 'Previously Logged' %}active{% endif %}">{{ chip }}</span>
+    {% endfor %}
+  </div>
+  <div class="picker-preview-list">
+    {% for food in foods %}
+    <div class="picker-row full-row">
+      <div class="picker-main">
+        <strong><a href="/foods/{{ food.id }}">{{ food.canonical_name }}</a></strong>
+        <span>{{ food.serving_description }}{% if food.grams_per_serving %} / {{ food.grams_per_serving }}g{% endif %}</span>
+        <small>{{ food.source }}{% if food.brand %} · {{ food.brand }}{% endif %}</small>
+      </div>
+      <div class="picker-macros">
+        <span class="coral-text">{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}g</span>
+        <span class="blue-text">{{ food.protein_g }}g</span>
+        <span class="gold-text">{{ food.fat_g }}g</span>
+        <strong>{{ food.calories }}</strong>
+      </div>
+      <span class="row-actions">
+        {% if food.source == "custom" %}
+        <a href="/foods/{{ food.id }}/edit">Edit</a>
+        {% else %}
+        <form action="/foods/{{ food.id }}/duplicate" method="post">
+          <button class="link-button" type="submit">Duplicate to custom</button>
+        </form>
+        {% endif %}
+      </span>
+    </div>
+    {% else %}
+    <p>No foods found.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

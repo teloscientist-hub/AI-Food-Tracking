@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">Daily detail</p>
+    <h2>{{ target_date }}</h2>
+    <p class="subtle">Consumed {{ daily.calories.consumed }} calories, {{ daily.protein.consumed }}g protein, {{ daily.carbs.consumed }}g carbs, {{ daily.fat.consumed }}g fat.</p>
+  </div>
+  <a class="button outline" href="/log">Add food</a>
+</section>
+{% for group in meal_groups %}
+<section class="panel meal-card">
+  <div class="panel-header meal-card-header">
+    <h3>{{ group.label }}</h3>
+    <span class="mini-link">{{ group.entries|length }} entr{{ "y" if group.entries|length == 1 else "ies" }}</span>
+  </div>
+  {% for entry in group.entries %}
+    {% for item in entry.items %}
+    <div class="meal-row">
+      <div class="meal-item-main">
+        <strong>{{ item.resolved_food_name }}</strong>
+        <span>{{ item.quantity }} {{ item.unit or item.serving_description_snapshot or "" }}</span>
+      </div>
+      <div class="meal-item-macros">
+        <span class="coral-text">{{ item.net_carbs_g_snapshot if item.net_carbs_g_snapshot is not none else item.carbs_g_snapshot }}g</span>
+        <span class="blue-text">{{ item.protein_g_snapshot }}g</span>
+        <span class="gold-text">{{ item.fat_g_snapshot }}g</span>
+        <strong>{{ item.calories_snapshot }}</strong>
+      </div>
+    </div>
+    {% endfor %}
+  {% endfor %}
+  <div class="meal-total">
+    <div><strong>{{ group.label }} Total</strong></div>
+    <div class="meal-item-macros">
+      <span class="coral-text">{{ "%.0f"|format(group.totals.net_carbs) }}g</span>
+      <span class="blue-text">{{ "%.0f"|format(group.totals.protein) }}g</span>
+      <span class="gold-text">{{ "%.0f"|format(group.totals.fat) }}g</span>
+      <strong>{{ "%.0f"|format(group.totals.calories) }}</strong>
+    </div>
+  </div>
+  <div class="meal-actions">
+    <a href="/log" class="mini-link">Advanced</a>
+    <a href="/log" class="mini-link">Add {{ group.label }}</a>
+  </div>
+</section>
+{% else %}
+<section class="panel"><p>No entries for this day.</p></section>
+{% endfor %}
+{% endblock %}

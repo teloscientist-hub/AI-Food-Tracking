@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title or "MML Food Tracking" }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-kicker">MML</div>
+        <h1>Food Tracking</h1>
+      </div>
+      <nav class="nav">
+        <a href="/">Dashboard</a>
+        <a href="/log">Add Log Entry</a>
+        <a href="/foods">Foods Library</a>
+        <a href="/daily/{{ today_iso() }}">Daily Log</a>
+        <a href="/weekly">Weekly Trends</a>
+      </nav>
+    </aside>
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">Food detail</p>
+    <h2>{{ food.canonical_name }}</h2>
+    <p class="subtle">{{ food.brand or "Custom catalog" }} · {{ food.serving_description }} · {{ food.grams_per_serving }}g</p>
+  </div>
+  <div class="toggle-row">
+    {% if food.source == "custom" %}
+    <a class="button outline" href="/foods/{{ food.id }}/edit">Edit food</a>
+    {% endif %}
+    <a class="button primary" href="/foods">Back to library</a>
+  </div>
+</section>
+<section class="grid two-up">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Nutrition Facts</h3>
+      <span class="mini-link">{{ food.source }}</span>
+    </div>
+    <div class="facts-meta">
+      <div><span>Name</span><strong>{{ food.canonical_name }}</strong></div>
+      <div><span>Serving Size</span><strong>{{ food.serving_description }}</strong></div>
+      <div><span>Serving Weight</span><strong>{{ food.grams_per_serving }}g</strong></div>
+      <div><span>Source</span><strong>{{ food.source }}</strong></div>
+      <div><span>Aliases</span><strong>{{ food.aliases|join(", ") if food.aliases else "None" }}</strong></div>
+    </div>
+    <div class="validation-strip">
+      <span>{% if food.authoritative_locked %}Authoritative custom food{% else %}Tracked food record{% endif %}</span>
+      <strong>Version {{ food.version }}</strong>
+    </div>
+    <div class="facts-table">
+      <div class="facts-head"><span>Nutrient</span><span>Value</span></div>
+      <div class="facts-row neutral"><span>Calories</span><strong>{{ food.calories }}</strong></div>
+      <div class="facts-row coral"><span>Total Carbs</span><strong>{{ food.carbs_g }}g</strong></div>
+      <div class="facts-row"><span class="sub-item">Net Carbs</span><strong>{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}g</strong></div>
+      <div class="facts-row"><span class="sub-item">Fiber</span><strong>{{ food.fiber_g if food.fiber_g is not none else 0 }}g</strong></div>
+      <div class="facts-row blue"><span>Protein</span><strong>{{ food.protein_g }}g</strong></div>
+      <div class="facts-row gold"><span>Fat</span><strong>{{ food.fat_g }}g</strong></div>
+    </div>
+    {% if food.notes %}
+    <div class="notes-box">
+      <strong>Notes</strong>
+      <p>{{ food.notes }}</p>
+    </div>
+    {% endif %}
+  </article>
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Quick Add</h3>
+      <span class="mini-link">Input</span>
+    </div>
+    <div class="quick-add-card">
+      <div class="quick-add-summary">
+        <div class="quick-add-bars">
+          <div class="quick-add-row"><span class="dot coral"></span><span>Net Carbs</span><strong>{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}g</strong></div>
+          <div class="bar soft"><span style="width: 100%"></span></div>
+          <div class="quick-add-row"><span class="dot blue"></span><span>Protein</span><strong>{{ food.protein_g }}g</strong></div>
+          <div class="bar soft"><span style="width: 100%"></span></div>
+          <div class="quick-add-row"><span class="dot gold"></span><span>Fat</span><strong>{{ food.fat_g }}g</strong></div>
+          <div class="bar soft"><span style="width: 100%"></span></div>
+          <div class="quick-add-row"><span class="dot gray"></span><span>Calories</span><strong>{{ food.calories }}</strong></div>
+          <div class="bar soft"><span style="width: 100%"></span></div>
+        </div>
+        <div class="macro-donut" style="--donut-a: {{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}; --donut-b: {{ food.protein_g }}; --donut-c: {{ food.fat_g }};">
+          <div class="macro-donut-core">
+            <strong>{{ food.calories }}</strong>
+            <span>Calories</span>
+          </div>
+        </div>
+      </div>
+      <form action="/log/review" method="post" class="stack">
+        <input type="hidden" name="raw_input_text" value="1 {{ food.canonical_name }}">
+        <input type="hidden" name="logged_at" value="">
+        <div class="form-grid">
+          <label>
+            <span>Servings</span>
+            <input type="number" step="0.25" value="1" disabled>
+          </label>
+          <label>
+            <span>Serving size</span>
+            <input type="text" value="{{ food.serving_description }}" disabled>
+          </label>
+        </div>
+        <label>
+          <span>Meal</span>
+          <select name="meal_label">
+            {% for meal in ["Breakfast","Lunch","Dinner","Snack 1","Snack 2","Snack 3","Supplements"] %}
+            <option value="{{ meal }}">{{ meal }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="button primary" type="submit">Review and add food</button>
+      </form>
+    </div>
+  </article>
+</section>
+{% endblock %}

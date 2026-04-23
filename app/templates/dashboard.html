@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">Summary-first dashboard</p>
+    <h2>Daily and weekly nutrition at a glance</h2>
+    <p class="subtle">Custom foods stay first-class, ambiguous phrases stay reviewable, and the dashboard stays dense without getting noisy.</p>
+  </div>
+  <a class="button primary" href="/log">Add food entry</a>
+</section>
+
+<section class="dashboard-grid">
+  <article class="panel dashboard-card">
+    <div class="panel-header dashboard-card-header">
+      <h3>My Macros</h3>
+      <a class="mini-link" href="/daily/{{ daily.date }}">Actual</a>
+    </div>
+    <div class="macro-card-layout">
+      <div class="macro-bubble">
+        <div class="macro-bubble-core">
+          <span>{{ daily.calories.consumed }}</span>
+          <small>kcal</small>
+        </div>
+      </div>
+      <div class="macro-rows">
+        {% for key, label, dot in [("protein","Protein","blue"),("fat","Fat","gold"),("calories","Cals","gray"),("net_carbs","Net Carbs","coral")] %}
+        <div class="macro-row">
+          <div class="macro-row-top">
+            <span class="dot {{ dot }}"></span>
+            <span>{{ label }}</span>
+            <strong>
+              {% if key in ["net_carbs"] %}
+              {{ daily[key].consumed if daily[key] else 0 }} / {{ daily[key].target if daily[key] else 0 }}g
+              {% elif key == "calories" %}
+              {{ daily[key].consumed }} / {{ daily[key].target or 0 }}
+              {% else %}
+              {{ daily[key].consumed }} / {{ daily[key].target or 0 }}g
+              {% endif %}
+            </strong>
+          </div>
+          <div class="bar soft"><span style="width: {{ progress[key] }}%"></span></div>
+          <div class="macro-row-sub">
+            {% if key in ["net_carbs"] %}
+            {{ daily[key].remaining if daily[key] else 0 }}g left
+            {% elif key == "calories" %}
+            {{ daily[key].remaining }} left
+            {% else %}
+            {{ daily[key].remaining }}g left
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+        <div class="macro-footnotes">
+          <div><span>Fiber</span><strong>{{ daily.fiber.consumed if daily.fiber else 0 }}g</strong></div>
+          <div><span>Total Carbs</span><strong>{{ daily.carbs.consumed }}g</strong></div>
+        </div>
+      </div>
+    </div>
+    <a class="button outline full" href="/weekly">Previous Week Summary</a>
+  </article>
+
+  <article class="panel dashboard-card goals-card">
+    <div class="panel-header dashboard-card-header">
+      <h3>My Goals</h3>
+      <span class="mini-link">Today</span>
+    </div>
+    <div class="goal-ring-stack">
+      {% for ring in goal_rings %}
+      <div class="goal-ring layer-{{ loop.index }}" style="--ring-color: {{ ring.color }}; --ring-percent: {{ ring.percent }}%;">
+        {% if loop.first %}
+        <div class="goal-ring-center">
+          <strong>{{ daily.calories.consumed }}</strong>
+          <span>/{{ daily.calories.target or 0 }}</span>
+          <small>Calories</small>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="goal-legend">
+      {% for key, label, dot in [("net_carbs","Net Carbs","coral"),("protein","Protein","blue"),("fat","Fat","gold")] %}
+      <div class="goal-legend-item">
+        <div class="goal-legend-top"><span class="dot {{ dot }}"></span><span>{{ label }}</span></div>
+        <strong>
+          {% if key == "net_carbs" %}
+          {{ daily[key].consumed if daily[key] else 0 }} / {{ daily[key].target if daily[key] else 0 }}g
+          {% else %}
+          {{ daily[key].consumed }} / {{ daily[key].target or 0 }}g
+          {% endif %}
+        </strong>
+        <small>
+          {% if key == "net_carbs" %}
+          {{ daily[key].remaining if daily[key] else 0 }}g left
+          {% else %}
+          {{ daily[key].remaining }}g left
+          {% endif %}
+        </small>
+      </div>
+      {% endfor %}
+    </div>
+    <a class="button outline full" href="/weekly">Previous Week Summary</a>
+  </article>
+
+  <article class="panel dashboard-card">
+    <div class="panel-header dashboard-card-header">
+      <h3>My Week</h3>
+      <div class="toggle-row compact">
+        {% for option in ["net_carbs","calories","protein","carbs","fat","fiber"] %}
+        <a class="metric-toggle {% if metric == option %}active{% endif %}" href="/?metric={{ option }}">{{ option.replace("_"," ") }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="week-total">
+      {% if metric == "calories" %}
+      {{ daily.calories.consumed }}
+      {% elif metric == "protein" %}
+      {{ daily.protein.consumed }}g
+      {% elif metric == "carbs" %}
+      {{ daily.carbs.consumed }}g
+      {% elif metric == "fat" %}
+      {{ daily.fat.consumed }}g
+      {% elif metric == "fiber" %}
+      {{ daily.fiber.consumed if daily.fiber else 0 }}g
+      {% else %}
+      {{ daily.net_carbs.consumed if daily.net_carbs else 0 }}g
+      {% endif %}
+    </div>
+    <div class="week-chart">
+      {% for day in weekly.days %}
+      {% set value = day[weekly_metric_key] %}
+      <div class="week-col">
+        <div class="week-bar-track">
+          <span class="week-bar {% if loop.last %}is-today{% endif %}" style="height: {{ ((value / max_metric) * 100) if max_metric else 0 }}%"></span>
+        </div>
+        <span class="week-day">{{ day.day[0] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="status-strip compact">
+      <div><span>Streak</span><strong>{{ daily.streak_days }} days</strong></div>
+      <div><span>Last logged</span><strong>{{ daily.last_logged_at or "No entries yet" }}</strong></div>
+      <div><span>Status</span><strong>{{ daily.status_text }}</strong></div>
+    </div>
+  </article>
+</section>
+
+<section class="dashboard-lower-grid">
+  <article class="panel utility-panel">
+    <div class="panel-header">
+      <h3>Today Note</h3>
+      <span class="mini-link">{{ daily.date }}</span>
+    </div>
+    <form action="/dashboard/note" method="post" class="stack">
+      <input type="hidden" name="note_date" value="{{ daily.date }}">
+      <textarea name="note_body" rows="8" placeholder="Plan, reminders, foods to add, corrections to make, restaurant notes...">{{ context.daily_note }}</textarea>
+      <button class="button primary" type="submit">Save note</button>
+    </form>
+  </article>
+
+  <aside class="utility-rail">
+    <article class="panel utility-card">
+      <div class="panel-header">
+        <h3>Logging Context</h3>
+        <span class="mini-link">Local</span>
+      </div>
+      <div class="utility-stats">
+        <div><span>Custom foods</span><strong>{{ context.custom_food_count }}</strong></div>
+        <div><span>Saved phrase mappings</span><strong>{{ context.remembered_phrases }}</strong></div>
+        <div><span>Unresolved items</span><strong>{{ context.unresolved_count }}</strong></div>
+      </div>
+    </article>
+
+    <article class="panel utility-card">
+      <div class="panel-header">
+        <h3>Weekly Leaders</h3>
+        <span class="mini-link">Protein</span>
+      </div>
+      <ul class="compact-list">
+        {% for food in weekly.top_foods %}
+        <li><span>{{ food.name }}</span><strong>{{ food.value }}</strong></li>
+        {% else %}
+        <li><span>No leaders yet</span><strong>0</strong></li>
+        {% endfor %}
+      </ul>
+    </article>
+  </aside>
+</section>
+{% endblock %}
