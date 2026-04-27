@@ -10,7 +10,7 @@ class LogReviewItem(BaseModel):
     quantity: float = 1.0
     unit: str | None = None
     quantity_text: str | None = None
-    selected_food_id: int
+    selected_food_id: int | None = None
     always_map: bool = False
 
 
@@ -19,4 +19,3 @@ class LogMealRequest(BaseModel):
     meal_label: str = "General"
     logged_at: datetime | None = None
     items: list[LogReviewItem] = Field(default_factory=list)
-

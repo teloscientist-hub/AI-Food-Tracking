@@ -133,6 +133,68 @@ class DailyNote(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
 
+class HealthGoal(Base):
+    __tablename__ = "health_goals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    target_date: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    weight_lb: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_weight_lb: Mapped[float | None] = mapped_column(Float, nullable=True)
+    weight_direction: Mapped[str] = mapped_column(String(16), default="below")
+    body_fat_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_body_fat_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    body_fat_direction: Mapped[str] = mapped_column(String(16), default="below")
+    lean_body_mass_lb: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_lean_body_mass_lb: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lean_body_mass_direction: Mapped[str] = mapped_column(String(16), default="above")
+    exercise_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_exercise_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)
+    exercise_minutes_direction: Mapped[str] = mapped_column(String(16), default="above")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
+
+
+class HealthMeasurement(Base):
+    __tablename__ = "health_measurements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    measurement_date: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    weight_lb: Mapped[float | None] = mapped_column(Float, nullable=True)
+    body_fat_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lean_body_mass_lb: Mapped[float | None] = mapped_column(Float, nullable=True)
+    exercise_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
+
+
+class ExerciseGoal(Base):
+    __tablename__ = "exercise_goals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    target_date: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    zone2_cardio_minutes_per_week: Mapped[float | None] = mapped_column(Float, nullable=True)
+    zone4_cardio_sessions_per_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    push_workouts_per_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pull_workouts_per_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hangs_minutes_per_week: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mobility_minutes_per_week: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
+
+
+class ExerciseCheckIn(Base):
+    __tablename__ = "exercise_checkins"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    checkin_date: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    did_zone2: Mapped[bool] = mapped_column(Boolean, default=False)
+    zone4_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)
+    did_push_workout: Mapped[bool] = mapped_column(Boolean, default=False)
+    did_pull_workout: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
+
+
 class FoodResolutionHistory(Base):
     __tablename__ = "food_resolution_history"
 

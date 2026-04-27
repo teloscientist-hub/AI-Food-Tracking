@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import asdict, dataclass, replace
 from difflib import SequenceMatcher
+import re
 from typing import Protocol
 
 from sqlalchemy import case, select
@@ -15,6 +17,11 @@ from app.services.off_client import OpenFoodFactsClient
 
 class FoodLookupClient(Protocol):
     def search(self, phrase: str, limit: int = 5) -> list[ExternalFoodCandidate]:
+        ...
+
+
+class BrandedFoodLookupClient(FoodLookupClient, Protocol):
+    def search_branded(self, phrase: str, limit: int = 5) -> list[ExternalFoodCandidate]:
         ...
 
 
@@ -44,8 +51,132 @@ class ResolutionResult:
     candidates: list[ResolutionCandidate]
 
 
+KNOWN_BRAND_MARKERS = {
+    "kirkland",
+    "ratio",
+    "reese",
+    "reese's",
+    "one",
+    "fairlife",
+    "premier",
+    "quest",
+    "core",
+    "power",
+}
+
+KNOWN_BRAND_PHRASES = {
+    "pure protein",
+    "premier protein",
+    "kirkland signature",
+    "dannon light fit",
+}
+
+PACKAGED_FOOD_MARKERS = {
+    "bar",
+    "yogurt",
+    "shake",
+    "protein",
+    "cheddar",
+    "shredded",
+    "mix",
+    "container",
+    "bottle",
+    "cup",
+}
+
+
+def normalized_tokens(phrase: str) -> set[str]:
+    return set(normalize_text(phrase).split())
+
+
+def source_rank(candidate: ResolutionCandidate) -> tuple[int, float]:
+    if candidate.source == "openfoodfacts":
+        return (0, -candidate.confidence)
+    if candidate.strategy.startswith("usda_branded"):
+        return (1, -candidate.confidence)
+    if candidate.source == "usda":
+        return (2, -candidate.confidence)
+    return (3, -candidate.confidence)
+
+
 def looks_branded(phrase: str) -> bool:
-    return any(char.isdigit() for char in phrase) or len(phrase.split()) >= 2
+    normalized = normalize_text(phrase)
+    tokens = normalized_tokens(phrase)
+    if not tokens:
+        return False
+    if any(brand_phrase in normalized for brand_phrase in KNOWN_BRAND_PHRASES):
+        return True
+    if tokens & KNOWN_BRAND_MARKERS:
+        return True
+    packaged_hits = len(tokens & PACKAGED_FOOD_MARKERS)
+    has_digits = any(char.isdigit() for char in phrase)
+    return has_digits and packaged_hits > 0
+
+
+def strongly_branded(phrase: str) -> bool:
+    normalized = normalize_text(phrase)
+    tokens = normalized_tokens(phrase)
+    if any(brand_phrase in normalized for brand_phrase in KNOWN_BRAND_PHRASES):
+        return True
+    if tokens & KNOWN_BRAND_MARKERS:
+        return True
+    has_digits = any(char.isdigit() for char in phrase)
+    return has_digits and len(tokens & PACKAGED_FOOD_MARKERS) >= 2
+
+
+def prepare_search_phrase(phrase: str) -> str:
+    cleaned = normalize_text(phrase)
+    cleaned = re.sub(r"\bbrand\b", "", cleaned)
+    cleaned = re.sub(r"\bwith \d+(?:\.\d+)? g of protein\b", "", cleaned)
+    cleaned = re.sub(r"\bwith \d+(?:\.\d+)? grams? of protein\b", "", cleaned)
+    cleaned = re.sub(r"\bof a\b", " ", cleaned)
+    cleaned = re.sub(r"\bof\b", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def build_search_phrases(phrase: str) -> list[str]:
+    base = prepare_search_phrase(phrase)
+    variants = [base]
+    variant_rules = [
+        (r"\bprobiotic\b", ""),
+        (r"\bshredded\b", ""),
+        (r"\bmix\b", ""),
+        (r"\bprotein bar\b", "bar"),
+    ]
+    for pattern, replacement in variant_rules:
+        candidate = re.sub(pattern, replacement, base).strip()
+        candidate = re.sub(r"\s+", " ", candidate).strip()
+        if candidate and candidate not in variants:
+            variants.append(candidate)
+    if "ratio" in base and "yogurt" in base:
+        ratio_variants = [
+            re.sub(r"\b25 g\b", "", base).strip(),
+            re.sub(r"\bprobiotic\b", "", re.sub(r"\b25 g\b", "", base)).strip(),
+            "ratio protein yogurt blueberry",
+            "ratio blueberry yogurt",
+        ]
+        for candidate in ratio_variants:
+            candidate = re.sub(r"\s+", " ", candidate).strip()
+            if candidate and candidate not in variants:
+                variants.append(candidate)
+    if "kirkland" in base and ("cheddar" in base or "jack" in base):
+        kirkland_variants = [
+            re.sub(r"\bshredded\b", "", base).strip(),
+            re.sub(r"\bmix\b", "cheese", base).strip(),
+            "kirkland cheddar jack cheese",
+            "kirkland shredded cheddar jack cheese",
+            re.sub(r"\band\b", "", re.sub(r"\bmix\b", "cheese", base)).strip(),
+        ]
+        for candidate in kirkland_variants:
+            candidate = re.sub(r"\s+", " ", candidate).strip()
+            if candidate and candidate not in variants:
+                variants.append(candidate)
+    if "reese" in base and "one" in base:
+        candidate = "one reese's protein bar"
+        if candidate not in variants:
+            variants.append(candidate)
+    return variants[:5]
 
 
 class FoodResolver:
@@ -140,21 +271,88 @@ class FoodResolver:
         return scored[:5]
 
     def _external_lookup(self, phrase: str) -> list[ResolutionCandidate]:
+        search_phrases = build_search_phrases(phrase)
+        is_branded = looks_branded(search_phrases[0])
+        is_strongly_branded = strongly_branded(search_phrases[0])
+        branded_phrases = search_phrases if is_branded else search_phrases[:1]
+        generic_phrases = search_phrases[:1]
         candidates: list[ResolutionCandidate] = []
-        usda = self.usda_client.search(phrase)
-        candidates.extend(self._external_candidates(usda, "usda_search"))
 
-        top_usda = candidates[0] if candidates else None
-        should_use_off = top_usda is None or top_usda.confidence < 0.78 or looks_branded(phrase)
-        if should_use_off:
-            off = self.off_client.search(phrase)
-            candidates.extend(self._external_candidates(off, "openfoodfacts_search"))
+        with ThreadPoolExecutor(max_workers=min(3, max(1, len(branded_phrases)))) as executor:
+            future_map = {
+                executor.submit(self.off_client.search, search_phrase): idx
+                for idx, search_phrase in enumerate(branded_phrases)
+            }
+            for future in as_completed(future_map):
+                idx = future_map[future]
+                foods = future.result()
+                candidates.extend(self._external_candidates(foods, "openfoodfacts_search", idx))
 
-        candidates.sort(key=lambda item: item.confidence, reverse=True)
-        return candidates[:5]
+        if is_branded and hasattr(self.usda_client, "search_branded"):
+            with ThreadPoolExecutor(max_workers=min(3, max(1, len(branded_phrases)))) as executor:
+                future_map = {
+                    executor.submit(self.usda_client.search_branded, search_phrase): idx  # type: ignore[attr-defined]
+                    for idx, search_phrase in enumerate(branded_phrases)
+                }
+                for future in as_completed(future_map):
+                    idx = future_map[future]
+                    foods = future.result()
+                    candidates.extend(self._external_candidates(foods, "usda_branded_search", idx))
+
+        branded_candidates = [
+            candidate
+            for candidate in candidates
+            if candidate.strategy.startswith("usda_branded") or candidate.source == "openfoodfacts"
+        ]
+        top_branded = max(branded_candidates, key=lambda item: item.confidence, default=None)
+        should_search_generic_usda = (
+            not is_branded
+            or top_branded is None
+            or top_branded.confidence < 0.74
+        )
+        if should_search_generic_usda:
+            with ThreadPoolExecutor(max_workers=min(2, len(generic_phrases))) as executor:
+                future_map = {
+                    executor.submit(self.usda_client.search, search_phrase): idx
+                    for idx, search_phrase in enumerate(generic_phrases)
+                }
+                for future in as_completed(future_map):
+                    idx = future_map[future]
+                    foods = future.result()
+                    candidates.extend(self._external_candidates(foods, "usda_search", idx))
+
+        adjusted: list[ResolutionCandidate] = []
+        for candidate in candidates:
+            bonus = 0.0
+            penalty = 0.0
+            has_brand = bool(candidate.brand and normalize_text(candidate.brand))
+            if is_branded:
+                if candidate.source == "openfoodfacts":
+                    bonus += 0.08
+                if candidate.strategy.startswith("usda_branded"):
+                    bonus += 0.08
+                elif candidate.source == "usda" and has_brand:
+                    bonus += 0.04
+                if candidate.source == "usda" and not has_brand:
+                    penalty += 0.1
+            if is_strongly_branded and candidate.source == "usda" and not has_brand:
+                penalty += 0.08
+            adjusted.append(
+                replace(candidate, confidence=min(0.99, max(0.0, candidate.confidence + bonus - penalty)))
+            )
+
+        deduped: dict[tuple[str, str], ResolutionCandidate] = {}
+        for candidate in adjusted:
+            key = (candidate.source, normalize_text(candidate.canonical_name))
+            existing = deduped.get(key)
+            if existing is None or candidate.confidence > existing.confidence:
+                deduped[key] = candidate
+
+        resolved = sorted(deduped.values(), key=source_rank)
+        return resolved[:5]
 
     def _external_candidates(
-        self, foods: list[ExternalFoodCandidate], strategy: str
+        self, foods: list[ExternalFoodCandidate], strategy: str, search_index: int = 0
     ) -> list[ResolutionCandidate]:
         return [
             ResolutionCandidate(
@@ -162,8 +360,8 @@ class FoodResolver:
                 canonical_name=food.canonical_name,
                 brand=food.brand,
                 source=food.source,
-                confidence=food.score,
-                strategy=strategy,
+                confidence=max(0.0, food.score - (search_index * 0.03)),
+                strategy=strategy if search_index == 0 else f"{strategy}_variant",
                 serving_description=food.serving_description,
                 calories=food.calories,
                 protein_g=food.protein_g,

@@ -3,10 +3,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import uuid4
 
-from sqlalchemy import Select, or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import CustomFoodMetadata, Food, FoodAlias
+from app.models import CustomFoodMetadata, Food, FoodAlias, MealEntry, MealEntryItem
 from app.schemas.foods import FoodCreate, FoodRead, FoodUpdate
 from app.services.parser import normalize_text
 
@@ -152,6 +152,136 @@ def search_foods(session: Session, query: str | None = None, source: str | None 
     return session.scalars(stmt.order_by(Food.source, Food.canonical_name)).all()
 
 
+def get_picker_foods(session: Session, query: str | None = None, source: str | None = None) -> list[dict]:
+    foods = search_foods(session, query, source)
+    recent_map = _recent_log_map(session)
+    if query:
+        return [_picker_card(session, food, recent_map.get(food.id)) for food in foods]
+
+    recent_food_ids = [food_id for food_id in recent_map if any(food.id == food_id for food in foods)]
+    ordered_foods: list[Food] = []
+    seen_food_ids: set[int] = set()
+
+    food_by_id = {food.id: food for food in foods}
+    for food_id in recent_food_ids:
+        food = food_by_id.get(food_id)
+        if not food or food_id in seen_food_ids:
+            continue
+        ordered_foods.append(food)
+        seen_food_ids.add(food_id)
+
+    for food in foods:
+        if food.id in seen_food_ids:
+            continue
+        ordered_foods.append(food)
+        seen_food_ids.add(food.id)
+
+    return [_picker_card(session, food, recent_map.get(food.id)) for food in ordered_foods]
+
+
+def get_food_library_cards(session: Session, query: str | None = None, source: str | None = None) -> list[dict]:
+    foods = search_foods(session, query, source)
+    log_stats = _food_log_stats_map(session)
+    cards: list[dict] = []
+    for food in foods:
+        stats = log_stats.get(food.id, {"log_count": 0, "last_logged_at": None})
+        cards.append(
+            {
+                "food": food_to_read(session, food),
+                "log_count": int(stats["log_count"]),
+                "last_logged_at": stats["last_logged_at"],
+            }
+        )
+
+    cards.sort(
+        key=lambda card: (
+            0 if card["log_count"] > 0 else 1,
+            -card["log_count"],
+            -(card["last_logged_at"].timestamp() if card["last_logged_at"] else 0),
+            card["food"].canonical_name.lower(),
+        )
+    )
+    return cards
+
+
+def _recent_log_map(session: Session) -> dict[int, tuple[MealEntryItem, object]]:
+    rows = (
+        session.query(MealEntryItem, MealEntry)
+        .join(MealEntry, MealEntry.id == MealEntryItem.meal_entry_id)
+        .filter(MealEntryItem.food_id.is_not(None))
+        .order_by(MealEntry.logged_at.desc(), MealEntryItem.id.desc())
+        .all()
+    )
+    recent: dict[int, tuple[MealEntryItem, object]] = {}
+    for meal_item, meal_entry in rows:
+        if meal_item.food_id is None or meal_item.food_id in recent:
+            continue
+        recent[meal_item.food_id] = (meal_item, meal_entry.logged_at)
+    return recent
+
+
+def _food_log_stats_map(session: Session) -> dict[int, dict]:
+    rows = (
+        session.query(
+            MealEntryItem.food_id,
+            func.count(MealEntryItem.id),
+            func.max(MealEntry.logged_at),
+        )
+        .join(MealEntry, MealEntry.id == MealEntryItem.meal_entry_id)
+        .filter(MealEntryItem.food_id.is_not(None))
+        .group_by(MealEntryItem.food_id)
+        .all()
+    )
+    return {
+        int(food_id): {"log_count": int(log_count), "last_logged_at": last_logged_at}
+        for food_id, log_count, last_logged_at in rows
+        if food_id is not None
+    }
+
+
+def _picker_card(session: Session, food: Food, recent_entry: tuple[MealEntryItem, object] | None) -> dict:
+    food_read = food_to_read(session, food)
+    if recent_entry:
+        meal_item, logged_at = recent_entry
+        quick_quantity = meal_item.quantity
+        quick_unit = meal_item.unit
+        quick_label = f"{meal_item.quantity:g} {meal_item.unit}".strip() if meal_item.unit else f"{meal_item.quantity:g} {food.serving_description}"
+        last_logged_at = logged_at
+    else:
+        quick_quantity = 1.0
+        quick_unit = None
+        quick_label = f"1 {food.serving_description}"
+        last_logged_at = None
+    return {
+        "food": food_read,
+        "quick_quantity": quick_quantity,
+        "quick_unit": quick_unit,
+        "quick_label": quick_label,
+        "last_logged_at": last_logged_at,
+    }
+
+
+def _food_image_url(food: Food) -> str | None:
+    payload = food.raw_source_payload or {}
+    if not isinstance(payload, dict):
+        return None
+    direct_keys = ["image_url", "image_front_url", "image_small_url"]
+    for key in direct_keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    selected_images = payload.get("selected_images")
+    if isinstance(selected_images, dict):
+        front = selected_images.get("front")
+        if isinstance(front, dict):
+            display = front.get("display")
+            if isinstance(display, dict):
+                for value in display.values():
+                    if isinstance(value, str) and value:
+                        return value
+    return None
+
+
 def food_to_read(session: Session, food: Food) -> FoodRead:
     metadata = get_food_metadata(session, food)
     return FoodRead(
@@ -160,6 +290,7 @@ def food_to_read(session: Session, food: Food) -> FoodRead:
         brand=food.brand,
         source=food.source,
         source_food_id=food.source_food_id,
+        image_url=_food_image_url(food),
         serving_description=food.serving_description,
         grams_per_serving=food.grams_per_serving,
         calories=food.calories,
@@ -277,4 +408,3 @@ def seed_demo_data(session: Session) -> None:
 
 def list_aliases(session: Session, food: Food) -> Sequence[FoodAlias]:
     return session.scalars(select(FoodAlias).where(FoodAlias.food_id == food.id)).all()
-

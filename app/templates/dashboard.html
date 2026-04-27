@@ -1,65 +1,87 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="hero">
-  <div>
-    <p class="eyebrow">Summary-first dashboard</p>
-    <h2>Daily and weekly nutrition at a glance</h2>
-    <p class="subtle">Custom foods stay first-class, ambiguous phrases stay reviewable, and the dashboard stays dense without getting noisy.</p>
+<section class="dashboard-topbar">
+  <div class="dashboard-topbar-left">
+    <div class="brand-lockup">
+      <span class="brand-kicker">MML</span>
+      <strong>Food Tracking</strong>
+    </div>
+    <nav class="top-nav">
+      <a class="top-nav-link active" href="/">Dashboard</a>
+      <a class="top-nav-link" href="/foods">Foods Library</a>
+      <a class="top-nav-link" href="/daily/{{ daily.date }}">Daily Log</a>
+      <a class="top-nav-link" href="/weekly">Weekly Trends</a>
+      <a class="top-nav-link" href="/settings">Settings</a>
+    </nav>
   </div>
-  <a class="button primary" href="/log">Add food entry</a>
+  <div class="dashboard-date-pill">
+    <span>&lsaquo;</span>
+    <strong>{{ daily.date }}</strong>
+    <span>&rsaquo;</span>
+  </div>
 </section>
 
 <section class="dashboard-grid">
-  <article class="panel dashboard-card">
+  <article class="panel dashboard-card compact-card">
     <div class="panel-header dashboard-card-header">
       <h3>My Macros</h3>
       <a class="mini-link" href="/daily/{{ daily.date }}">Actual</a>
     </div>
     <div class="macro-card-layout">
-      <div class="macro-bubble">
-        <div class="macro-bubble-core">
-          <span>{{ daily.calories.consumed }}</span>
-          <small>kcal</small>
-        </div>
-      </div>
+      <div class="macro-bubble macro-bubble-pie"></div>
       <div class="macro-rows">
-        {% for key, label, dot in [("protein","Protein","blue"),("fat","Fat","gold"),("calories","Cals","gray"),("net_carbs","Net Carbs","coral")] %}
+        {% for key, label, dot in [("protein","Protein","blue"),("fat","Fat","gold"),("net_carbs","Net Carbs","coral")] %}
         <div class="macro-row">
           <div class="macro-row-top">
             <span class="dot {{ dot }}"></span>
             <span>{{ label }}</span>
             <strong>
-              {% if key in ["net_carbs"] %}
               {{ daily[key].consumed if daily[key] else 0 }} / {{ daily[key].target if daily[key] else 0 }}g
-              {% elif key == "calories" %}
-              {{ daily[key].consumed }} / {{ daily[key].target or 0 }}
-              {% else %}
-              {{ daily[key].consumed }} / {{ daily[key].target or 0 }}g
-              {% endif %}
             </strong>
           </div>
           <div class="bar soft"><span style="width: {{ progress[key] }}%"></span></div>
           <div class="macro-row-sub">
-            {% if key in ["net_carbs"] %}
-            {{ daily[key].remaining if daily[key] else 0 }}g left
-            {% elif key == "calories" %}
-            {{ daily[key].remaining }} left
-            {% else %}
+            {% if daily[key] and daily[key].remaining > 0 %}
             {{ daily[key].remaining }}g left
+            {% else %}
+            {{ ((daily[key].remaining if daily[key] else 0) * -1) | round(2) }}g over
             {% endif %}
           </div>
         </div>
         {% endfor %}
-        <div class="macro-footnotes">
-          <div><span>Fiber</span><strong>{{ daily.fiber.consumed if daily.fiber else 0 }}g</strong></div>
-          <div><span>Total Carbs</span><strong>{{ daily.carbs.consumed }}g</strong></div>
+      </div>
+    </div>
+    <div class="macro-single-row">
+      <div class="macro-row">
+        <div class="macro-row-top">
+          <span class="dot gray"></span>
+          <span>Calories</span>
+          <strong>{{ daily.calories.consumed }} / {{ daily.calories.target or 0 }}</strong>
+        </div>
+        <div class="bar soft"><span style="width: {{ progress.calories }}%"></span></div>
+        <div class="macro-row-sub">
+          {% if daily.calories.remaining > 0 %}
+          {{ daily.calories.remaining }} left
+          {% else %}
+          {{ (daily.calories.remaining * -1) | round(2) }} over
+          {% endif %}
         </div>
       </div>
     </div>
-    <a class="button outline full" href="/weekly">Previous Week Summary</a>
+    <div class="macro-footnotes">
+      <div>
+        <span>Fiber</span>
+        <strong>{{ daily.fiber.consumed if daily.fiber else 0 }}g / {{ daily.fiber.target if daily.fiber and daily.fiber.target is not none else 0 }}g</strong>
+      </div>
+      <div>
+        <span>Total Carbs</span>
+        <strong>{{ daily.carbs.consumed }}g / {{ daily.carbs.target or 0 }}g</strong>
+      </div>
+    </div>
+    <a class="button outline full" href="/weekly">Weekly Summary</a>
   </article>
 
-  <article class="panel dashboard-card goals-card">
+  <article class="panel dashboard-card compact-card goals-card">
     <div class="panel-header dashboard-card-header">
       <h3>My Goals</h3>
       <span class="mini-link">Today</span>
@@ -90,18 +112,18 @@
         </strong>
         <small>
           {% if key == "net_carbs" %}
-          {{ daily[key].remaining if daily[key] else 0 }}g left
+          {% if daily[key] and daily[key].remaining > 0 %}{{ daily[key].remaining }}g left{% else %}{{ ((daily[key].remaining if daily[key] else 0) * -1) | round(2) }}g over{% endif %}
           {% else %}
-          {{ daily[key].remaining }}g left
+          {% if daily[key].remaining > 0 %}{{ daily[key].remaining }}g left{% else %}{{ (daily[key].remaining * -1) | round(2) }}g over{% endif %}
           {% endif %}
         </small>
       </div>
       {% endfor %}
     </div>
-    <a class="button outline full" href="/weekly">Previous Week Summary</a>
+    <a class="button outline full" href="/weekly">Weekly Summary</a>
   </article>
 
-  <article class="panel dashboard-card">
+  <article class="panel dashboard-card compact-card">
     <div class="panel-header dashboard-card-header">
       <h3>My Week</h3>
       <div class="toggle-row compact">
@@ -136,53 +158,114 @@
       </div>
       {% endfor %}
     </div>
-    <div class="status-strip compact">
-      <div><span>Streak</span><strong>{{ daily.streak_days }} days</strong></div>
-      <div><span>Last logged</span><strong>{{ daily.last_logged_at or "No entries yet" }}</strong></div>
-      <div><span>Status</span><strong>{{ daily.status_text }}</strong></div>
-    </div>
+    <a class="button outline full" href="/weekly">Weekly Summary</a>
   </article>
 </section>
 
-<section class="dashboard-lower-grid">
-  <article class="panel utility-panel">
-    <div class="panel-header">
-      <h3>Today Note</h3>
-      <span class="mini-link">{{ daily.date }}</span>
+<section class="dashboard-home-layout">
+  <aside class="panel quick-log-panel split-layout">
+    {% if error %}
+    <div class="save-banner picker-inline-banner">
+      <strong>Entry required</strong>
+      <span>{{ error }}</span>
     </div>
-    <form action="/dashboard/note" method="post" class="stack">
-      <input type="hidden" name="note_date" value="{{ daily.date }}">
-      <textarea name="note_body" rows="8" placeholder="Plan, reminders, foods to add, corrections to make, restaurant notes...">{{ context.daily_note }}</textarea>
-      <button class="button primary" type="submit">Save note</button>
-    </form>
-  </article>
-
-  <aside class="utility-rail">
-    <article class="panel utility-card">
-      <div class="panel-header">
-        <h3>Logging Context</h3>
-        <span class="mini-link">Local</span>
+    {% endif %}
+    <form action="/log/review" method="post" class="stack">
+      <input type="hidden" name="redirect_to" value="/">
+      <label class="quick-log-text">
+        <span>Entry text</span>
+        <textarea name="raw_input_text" rows="5" placeholder="2 eggs, 3 bacon, 1 Fairlife 42, 1 tbsp butter" required></textarea>
+      </label>
+      <div class="form-grid compact-grid">
+        <label>
+          <span>Meal label</span>
+          <select name="meal_label">
+            {% for option in meal_options %}
+            <option value="{{ option }}" {% if meal_label == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>Logged at</span>
+          <input type="datetime-local" name="logged_at" value="{{ logged_at }}">
+        </label>
       </div>
-      <div class="utility-stats">
-        <div><span>Custom foods</span><strong>{{ context.custom_food_count }}</strong></div>
-        <div><span>Saved phrase mappings</span><strong>{{ context.remembered_phrases }}</strong></div>
-        <div><span>Unresolved items</span><strong>{{ context.unresolved_count }}</strong></div>
-      </div>
-    </article>
-
-    <article class="panel utility-card">
-      <div class="panel-header">
-        <h3>Weekly Leaders</h3>
-        <span class="mini-link">Protein</span>
-      </div>
-      <ul class="compact-list">
-        {% for food in weekly.top_foods %}
-        <li><span>{{ food.name }}</span><strong>{{ food.value }}</strong></li>
-        {% else %}
-        <li><span>No leaders yet</span><strong>0</strong></li>
+      <div class="quick-chips">
+        {% for phrase in ["Fairlife 42", "protein coffee", "2 eggs", "ribeye", "yogurt bowl"] %}
+        <span class="chip">{{ phrase }}</span>
         {% endfor %}
-      </ul>
-    </article>
+      </div>
+      <button class="button primary" type="submit">Parse and review</button>
+    </form>
+
+    <form action="/dashboard/exercise" method="post" class="stack exercise-entry-card">
+      <input type="hidden" name="checkin_date" value="{{ daily.date }}">
+      <div class="panel-header">
+        <h3>Exercise</h3>
+        <span class="mini-link">Today</span>
+      </div>
+      <label class="inline exercise-check">
+        <input type="checkbox" name="did_zone2" value="1" {% if exercise_checkin.did_zone2 %}checked{% endif %}>
+        <span>Did Zone 2?</span>
+      </label>
+      <label>
+        <span>Zone 4 Minutes</span>
+        <input type="number" name="zone4_minutes" min="0" step="1" value="{{ exercise_checkin.zone4_minutes }}">
+      </label>
+      <label class="inline exercise-check">
+        <input type="checkbox" name="did_push_workout" value="1" {% if exercise_checkin.did_push_workout %}checked{% endif %}>
+        <span>Push Workout</span>
+      </label>
+      <label class="inline exercise-check">
+        <input type="checkbox" name="did_pull_workout" value="1" {% if exercise_checkin.did_pull_workout %}checked{% endif %}>
+        <span>Pull Workout</span>
+      </label>
+      <button class="button secondary" type="submit">Save exercise</button>
+    </form>
   </aside>
+
+  <div class="meal-stack">
+    {% for group in meal_sections %}
+    <section class="panel meal-card">
+      <div class="panel-header meal-card-header">
+        <h3>{{ group.label }}</h3>
+        <span class="mini-link">&#8942;</span>
+      </div>
+      {% if group.entries %}
+        {% for entry in group.entries %}
+          {% for item in entry.items %}
+          <div class="meal-row">
+            <div class="meal-item-main">
+              <strong>{{ item.resolved_food_name or item.parsed_phrase }}</strong>
+              <span>{{ item.quantity }} {{ item.unit or item.serving_description_snapshot or "" }}</span>
+            </div>
+            <div class="meal-item-macros">
+              <span class="coral-text">{{ item.net_carbs_g_snapshot if item.net_carbs_g_snapshot is not none else item.carbs_g_snapshot }}g</span>
+              <span class="blue-text">{{ item.protein_g_snapshot }}g</span>
+              <span class="gold-text">{{ item.fat_g_snapshot }}g</span>
+              <strong>{{ item.calories_snapshot }}</strong>
+            </div>
+          </div>
+          {% endfor %}
+        {% endfor %}
+        <div class="meal-total">
+          <div><strong>{{ group.label }} Total</strong></div>
+          <div class="meal-item-macros">
+            <span class="coral-text">{{ "%.0f"|format(group.totals.net_carbs) }}g</span>
+            <span class="blue-text">{{ "%.0f"|format(group.totals.protein) }}g</span>
+            <span class="gold-text">{{ "%.0f"|format(group.totals.fat) }}g</span>
+            <strong>{{ "%.0f"|format(group.totals.calories) }}</strong>
+          </div>
+        </div>
+      {% else %}
+      <div class="meal-empty-row"></div>
+      {% endif %}
+      <div class="meal-actions">
+        <a href="/log?meal_label={{ group.label }}" class="mini-link">Advanced</a>
+        <a href="/log?meal_label={{ group.label }}" class="mini-link">Add {{ group.label }}</a>
+      </div>
+    </section>
+    {% endfor %}
+  </div>
 </section>
 {% endblock %}

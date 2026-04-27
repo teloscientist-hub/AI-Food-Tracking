@@ -1,0 +1,420 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="dashboard-topbar">
+  <div class="dashboard-topbar-left">
+    <div>
+      <p class="eyebrow">Targets and defaults</p>
+      <h2>Settings</h2>
+    </div>
+  </div>
+  <div class="toggle-row">
+    <a class="button outline" href="/">Home Screen</a>
+  </div>
+</section>
+
+<section class="settings-tabs">
+  <button class="top-nav-link active" type="button" data-settings-tab="targets">Daily Targets</button>
+  <button class="top-nav-link" type="button" data-settings-tab="calculator">Macros Calculator</button>
+</section>
+
+<section class="settings-tab-panel active" data-settings-panel="targets">
+  <section class="settings-layout">
+    <article class="panel settings-panel">
+      <div class="panel-header">
+        <h3>Daily Targets</h3>
+        <span class="mini-link">Active from today</span>
+      </div>
+      {% if saved %}
+      <div class="save-banner picker-inline-banner">
+        <strong>Targets saved</strong>
+        <span>Dashboard summaries now use these values.</span>
+      </div>
+      {% endif %}
+      <form action="/settings" method="post" class="stack settings-form" id="targets-form">
+        <div class="form-grid">
+          <label>
+            <span>Protein</span>
+            <input id="protein_target_g" type="number" name="protein_target_g" min="0" step="0.1" value="{{ settings.protein_target_g }}">
+          </label>
+          <label>
+            <span>Fat</span>
+            <input id="fat_target_g" type="number" name="fat_target_g" min="0" step="0.1" value="{{ settings.fat_target_g }}">
+          </label>
+          <label>
+            <span>Net Carbs</span>
+            <input id="net_carbs_target_g" type="number" name="net_carbs_target_g" min="0" step="0.1" value="{{ settings.net_carbs_target_g }}">
+          </label>
+          <label>
+            <span>Fiber</span>
+            <input id="fiber_target_g" type="number" name="fiber_target_g" min="0" step="0.1" value="{{ settings.fiber_target_g }}">
+          </label>
+          <label>
+            <span>Calories</span>
+            <input id="calories_target" type="number" name="calories_target" min="0" step="1" value="{{ settings.calories_target }}">
+          </label>
+        </div>
+        <section class="health-goals-card">
+          <div class="panel-header">
+            <h3>Health Goals</h3>
+            <span class="mini-link">Actuals tracked by date</span>
+          </div>
+          <p class="subtle">Your desired values are saved as targets. Your actual values are stored as a dated check-in for <strong>{{ health.measurement_date }}</strong>, so they can be graphed and used in later calculations.</p>
+          <div class="health-goals-head">
+            <span></span>
+            <span>Desired</span>
+            <span>Actual</span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="health-goals-grid">
+            <div class="health-goal-row">
+              <label class="health-goal-field health-goal-name">
+                <span>Weight</span>
+              </label>
+              <label class="health-goal-field">
+                <input type="number" name="weight_lb" min="0" step="0.1" value="{{ health.weight_lb }}">
+              </label>
+              <label class="health-goal-field">
+                <input type="number" name="current_weight_lb" min="0" step="0.1" value="{{ health.current_weight_lb }}">
+              </label>
+              <span class="health-goal-unit">lb</span>
+              <input type="hidden" name="weight_direction" value="{{ health.weight_direction }}" data-direction-input="weight">
+              <div class="health-goal-toggle" data-direction-group="weight">
+                <button class="chip {% if health.weight_direction == 'above' %}active{% endif %}" type="button" data-direction-value="above">above</button>
+                <button class="chip {% if health.weight_direction == 'below' %}active{% endif %}" type="button" data-direction-value="below">below</button>
+              </div>
+            </div>
+            <div class="health-goal-row">
+              <label class="health-goal-field health-goal-name">
+                <span>Body Fat</span>
+              </label>
+              <label class="health-goal-field">
+                <input type="number" name="body_fat_pct" min="0" step="0.1" value="{{ health.body_fat_pct }}">
+              </label>
+              <label class="health-goal-field">
+                <input type="number" name="current_body_fat_pct" min="0" step="0.1" value="{{ health.current_body_fat_pct }}">
+              </label>
+              <span class="health-goal-unit">%</span>
+              <input type="hidden" name="body_fat_direction" value="{{ health.body_fat_direction }}" data-direction-input="body-fat">
+              <div class="health-goal-toggle" data-direction-group="body-fat">
+                <button class="chip {% if health.body_fat_direction == 'above' %}active{% endif %}" type="button" data-direction-value="above">above</button>
+                <button class="chip {% if health.body_fat_direction == 'below' %}active{% endif %}" type="button" data-direction-value="below">below</button>
+              </div>
+            </div>
+            <div class="health-goal-row">
+              <label class="health-goal-field health-goal-name">
+                <span>Lean Body Mass</span>
+              </label>
+              <label class="health-goal-field">
+                <input type="number" name="lean_body_mass_lb" min="0" step="0.1" value="{{ health.lean_body_mass_lb }}">
+              </label>
+              <label class="health-goal-field">
+                <input type="number" name="current_lean_body_mass_lb" min="0" step="0.1" value="{{ health.current_lean_body_mass_lb }}">
+              </label>
+              <span class="health-goal-unit">lb</span>
+              <input type="hidden" name="lean_body_mass_direction" value="{{ health.lean_body_mass_direction }}" data-direction-input="lean-body-mass">
+              <div class="health-goal-toggle" data-direction-group="lean-body-mass">
+                <button class="chip {% if health.lean_body_mass_direction == 'above' %}active{% endif %}" type="button" data-direction-value="above">above</button>
+                <button class="chip {% if health.lean_body_mass_direction == 'below' %}active{% endif %}" type="button" data-direction-value="below">below</button>
+              </div>
+            </div>
+          </div>
+        </section>
+        <button class="button primary" type="submit">Save targets</button>
+      </form>
+    </article>
+
+    <aside class="settings-side">
+      <section class="panel settings-panel">
+        <div class="panel-header">
+          <h3>Macro Summary</h3>
+          <span class="mini-link">4 / 9 / 4 rule</span>
+        </div>
+        <div class="settings-calc">
+          <div class="settings-calc-row">
+            <span>Protein calories</span>
+            <strong id="protein_cals">{{ settings.protein_target_g * 4 }}</strong>
+          </div>
+          <div class="settings-calc-row">
+            <span>Fat calories</span>
+            <strong id="fat_cals">{{ settings.fat_target_g * 9 }}</strong>
+          </div>
+          <div class="settings-calc-row">
+            <span>Total carbs</span>
+            <strong><span id="total_carbs_g">{{ settings.carbs_target_g }}</span>g</strong>
+          </div>
+          <div class="settings-calc-row">
+            <span>Carb calories</span>
+            <strong id="carb_cals">{{ settings.carbs_target_g * 4 }}</strong>
+          </div>
+          <div class="settings-calc-total">
+            <span>Calculated calories from macros</span>
+            <strong id="calculated_calories">{{ settings.calculated_calories }}</strong>
+          </div>
+          <p class="subtle">Total carbs are calculated as <strong>net carbs + fiber</strong>. Save whatever calorie target you want to use on the left.</p>
+        </div>
+      </section>
+
+      <section class="panel settings-panel">
+        <div class="panel-header">
+          <h3>Exercise Goals</h3>
+          <span class="mini-link">Weekly targets</span>
+        </div>
+        {% if saved == "exercise" %}
+        <div class="save-banner picker-inline-banner">
+          <strong>Exercise goals saved</strong>
+          <span>Weekly targets updated.</span>
+        </div>
+        {% endif %}
+        <form action="/settings/exercise" method="post" class="stack">
+          <div class="form-grid">
+            <label>
+              <span>Zone 2 Cardio</span>
+              <input type="number" name="zone2_cardio_minutes_per_week" min="0" step="1" value="{{ exercise.zone2_cardio_minutes_per_week }}">
+            </label>
+            <label>
+              <span>Zone 4 Cardio / Week</span>
+              <input type="number" name="zone4_cardio_sessions_per_week" min="0" step="1" value="{{ exercise.zone4_cardio_sessions_per_week }}">
+            </label>
+            <label>
+              <span>Push Workout / Week</span>
+              <input type="number" name="push_workouts_per_week" min="0" step="1" value="{{ exercise.push_workouts_per_week }}">
+            </label>
+            <label>
+              <span>Pull Workout / Week</span>
+              <input type="number" name="pull_workouts_per_week" min="0" step="1" value="{{ exercise.pull_workouts_per_week }}">
+            </label>
+            <label>
+              <span>Hangs / Week</span>
+              <input type="number" name="hangs_minutes_per_week" min="0" step="1" value="{{ exercise.hangs_minutes_per_week }}">
+            </label>
+            <label>
+              <span>Mobility / Week</span>
+              <input type="number" name="mobility_minutes_per_week" min="0" step="1" value="{{ exercise.mobility_minutes_per_week }}">
+            </label>
+          </div>
+          <button class="button primary" type="submit">Save exercise goals</button>
+        </form>
+      </section>
+    </aside>
+  </section>
+</section>
+
+<section class="settings-tab-panel" data-settings-panel="calculator">
+  <section class="settings-calculator-stack">
+    <article class="panel settings-step-card">
+      <div class="settings-step-head">
+        <div>
+          <span class="eyebrow">Step 1</span>
+          <h3>My Calorie Goals</h3>
+        </div>
+      </div>
+      <p class="subtle">Start by picking a calorie goal based on whether you want to lose weight, maintain, or gain muscle.</p>
+      <div class="settings-goal-tabs">
+        <button class="chip active" type="button" data-goal-mode="lose">Lose Weight</button>
+        <button class="chip" type="button" data-goal-mode="maintain">Maintain</button>
+        <button class="chip" type="button" data-goal-mode="gain">Gain Muscle</button>
+      </div>
+      <div class="settings-arc-card">
+        <div class="settings-arc">
+          <div class="settings-arc-inner">
+            <span>daily calories goal of</span>
+            <strong id="goal_calories_display">{{ settings.calories_target }}</strong>
+            <small id="goal_calories_note">Custom target</small>
+          </div>
+        </div>
+        <button class="button outline" type="button" id="apply_goal_calories">Use in daily targets</button>
+      </div>
+    </article>
+
+    <article class="panel settings-step-card">
+      <div class="settings-step-head">
+        <div>
+          <span class="eyebrow">Step 2</span>
+          <h3>My Macronutrient Goals</h3>
+        </div>
+      </div>
+      <p class="subtle">Adjust macro goals and see the ratio update live. These sliders mirror the values in your daily targets.</p>
+      <div class="settings-ratio-head">
+        <div class="settings-ratio-select">
+          <span>Carbs / Protein / Fat Ratio</span>
+          <strong>Custom</strong>
+        </div>
+        <div class="macro-donut settings-macro-donut">
+          <div class="macro-donut-core">
+            <strong id="ratio_percent_display">100%</strong>
+            <span>Tracked</span>
+          </div>
+        </div>
+      </div>
+      <div class="settings-slider-group">
+        <div class="settings-slider-row">
+          <div class="settings-slider-head">
+            <strong>Net Carbs</strong>
+            <span><span id="net_carbs_live">{{ settings.net_carbs_target_g }}</span> g</span>
+          </div>
+          <input id="net_carbs_slider" type="range" min="0" max="200" step="1" value="{{ settings.net_carbs_target_g }}">
+        </div>
+        <div class="settings-slider-row">
+          <div class="settings-slider-head">
+            <strong>Protein</strong>
+            <span><span id="protein_live">{{ settings.protein_target_g }}</span> g</span>
+          </div>
+          <input id="protein_slider" type="range" min="0" max="350" step="1" value="{{ settings.protein_target_g }}">
+        </div>
+        <div class="settings-slider-row">
+          <div class="settings-slider-head">
+            <strong>Fat</strong>
+            <span><span id="fat_live">{{ settings.fat_target_g }}</span> g</span>
+          </div>
+          <input id="fat_slider" type="range" min="0" max="200" step="1" value="{{ settings.fat_target_g }}">
+        </div>
+      </div>
+    </article>
+  </section>
+</section>
+
+<script>
+  (() => {
+    const proteinInput = document.getElementById("protein_target_g");
+    const fatInput = document.getElementById("fat_target_g");
+    const netCarbsInput = document.getElementById("net_carbs_target_g");
+    const fiberInput = document.getElementById("fiber_target_g");
+    const caloriesInput = document.getElementById("calories_target");
+
+    const proteinCals = document.getElementById("protein_cals");
+    const fatCals = document.getElementById("fat_cals");
+    const totalCarbsG = document.getElementById("total_carbs_g");
+    const carbCals = document.getElementById("carb_cals");
+    const calculatedCalories = document.getElementById("calculated_calories");
+
+    const netCarbsLive = document.getElementById("net_carbs_live");
+    const proteinLive = document.getElementById("protein_live");
+    const fatLive = document.getElementById("fat_live");
+    const ratioPercentDisplay = document.getElementById("ratio_percent_display");
+
+    const netCarbsSlider = document.getElementById("net_carbs_slider");
+    const proteinSlider = document.getElementById("protein_slider");
+    const fatSlider = document.getElementById("fat_slider");
+
+    const goalDisplay = document.getElementById("goal_calories_display");
+    const goalNote = document.getElementById("goal_calories_note");
+    const applyGoalButton = document.getElementById("apply_goal_calories");
+    const goalButtons = [...document.querySelectorAll("[data-goal-mode]")];
+    const settingsTabs = [...document.querySelectorAll("[data-settings-tab]")];
+    const settingsPanels = [...document.querySelectorAll("[data-settings-panel]")];
+    const directionGroups = [...document.querySelectorAll("[data-direction-group]")];
+
+    const readNumber = (input) => {
+      const value = Number.parseFloat(input?.value || "0");
+      return Number.isFinite(value) ? value : 0;
+    };
+
+    const baseCalories = readNumber(caloriesInput);
+    let activeGoalMode = "lose";
+    let suggestedCalories = baseCalories;
+
+    const computeGoalCalories = () => {
+      const current = readNumber(caloriesInput) || readNumber(calculatedCalories);
+      if (activeGoalMode === "maintain") {
+        suggestedCalories = current;
+        goalNote.textContent = "Maintain calories";
+      } else if (activeGoalMode === "gain") {
+        suggestedCalories = current * 1.1;
+        goalNote.textContent = "+10% muscle gain target";
+      } else {
+        suggestedCalories = current * 0.8;
+        goalNote.textContent = "-20% calorie deficit";
+      }
+      goalDisplay.textContent = suggestedCalories.toFixed(0);
+    };
+
+    const render = () => {
+      const protein = readNumber(proteinInput);
+      const fat = readNumber(fatInput);
+      const netCarbs = readNumber(netCarbsInput);
+      const fiber = readNumber(fiberInput);
+      const totalCarbs = netCarbs + fiber;
+      const proteinCalories = protein * 4;
+      const fatCalories = fat * 9;
+      const carbsCalories = totalCarbs * 4;
+      const totalCalories = proteinCalories + fatCalories + carbsCalories;
+
+      proteinCals.textContent = proteinCalories.toFixed(1);
+      fatCals.textContent = fatCalories.toFixed(1);
+      totalCarbsG.textContent = totalCarbs.toFixed(1);
+      carbCals.textContent = carbsCalories.toFixed(1);
+      calculatedCalories.textContent = totalCalories.toFixed(1);
+
+      proteinLive.textContent = protein.toFixed(0);
+      fatLive.textContent = fat.toFixed(0);
+      netCarbsLive.textContent = netCarbs.toFixed(0);
+
+      const trackedCalories = proteinCalories + fatCalories + (netCarbs * 4);
+      const targetCalories = readNumber(caloriesInput) || totalCalories || 1;
+      ratioPercentDisplay.textContent = `${Math.round((trackedCalories / targetCalories) * 100)}%`;
+
+      if (proteinSlider) proteinSlider.value = protein.toFixed(0);
+      if (fatSlider) fatSlider.value = fat.toFixed(0);
+      if (netCarbsSlider) netCarbsSlider.value = netCarbs.toFixed(0);
+
+      computeGoalCalories();
+    };
+
+    settingsTabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const target = tab.getAttribute("data-settings-tab");
+        settingsTabs.forEach((item) => item.classList.toggle("active", item === tab));
+        settingsPanels.forEach((panel) => panel.classList.toggle("active", panel.getAttribute("data-settings-panel") === target));
+      });
+    });
+
+    goalButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        activeGoalMode = button.getAttribute("data-goal-mode") || "lose";
+        goalButtons.forEach((item) => item.classList.toggle("active", item === button));
+        computeGoalCalories();
+      });
+    });
+
+    directionGroups.forEach((group) => {
+      const groupName = group.getAttribute("data-direction-group");
+      const hiddenInput = document.querySelector(`[data-direction-input="${groupName}"]`);
+      const buttons = [...group.querySelectorAll("[data-direction-value]")];
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const value = button.getAttribute("data-direction-value") || "above";
+          if (hiddenInput instanceof HTMLInputElement) {
+            hiddenInput.value = value;
+          }
+          buttons.forEach((item) => item.classList.toggle("active", item === button));
+        });
+      });
+    });
+
+    applyGoalButton?.addEventListener("click", () => {
+      caloriesInput.value = suggestedCalories.toFixed(0);
+      render();
+    });
+
+    netCarbsSlider?.addEventListener("input", () => {
+      netCarbsInput.value = netCarbsSlider.value;
+      render();
+    });
+    proteinSlider?.addEventListener("input", () => {
+      proteinInput.value = proteinSlider.value;
+      render();
+    });
+    fatSlider?.addEventListener("input", () => {
+      fatInput.value = fatSlider.value;
+      render();
+    });
+
+    [proteinInput, fatInput, netCarbsInput, fiberInput, caloriesInput].forEach((input) => {
+      input?.addEventListener("input", render);
+    });
+
+    render();
+  })();
+</script>
+{% endblock %}

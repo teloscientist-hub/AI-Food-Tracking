@@ -70,13 +70,14 @@
           </div>
         </div>
       </div>
-      <form action="/log/review" method="post" class="stack">
-        <input type="hidden" name="raw_input_text" value="1 {{ food.canonical_name }}">
-        <input type="hidden" name="logged_at" value="">
+      <form action="/log/picker/add" method="post" class="stack">
+        <input type="hidden" name="food_id" value="{{ food.id }}">
+        <input type="hidden" name="q" value="{{ food.canonical_name }}">
+        <input type="hidden" name="source" value="{{ food.source }}">
         <div class="form-grid">
           <label>
             <span>Servings</span>
-            <input type="number" step="0.25" value="1" disabled>
+            <input type="number" name="quantity" step="0.001" min="0.001" value="1">
           </label>
           <label>
             <span>Serving size</span>
@@ -86,12 +87,16 @@
         <label>
           <span>Meal</span>
           <select name="meal_label">
-            {% for meal in ["Breakfast","Lunch","Dinner","Snack 1","Snack 2","Snack 3","Supplements"] %}
+            {% for meal in meal_options %}
             <option value="{{ meal }}">{{ meal }}</option>
             {% endfor %}
           </select>
         </label>
-        <button class="button primary" type="submit">Review and add food</button>
+        <label>
+          <span>Logged at</span>
+          <input type="datetime-local" name="logged_at" value="{{ today_iso() }}T12:00">
+        </label>
+        <button class="button primary" type="submit">Add this food</button>
       </form>
     </div>
   </article>

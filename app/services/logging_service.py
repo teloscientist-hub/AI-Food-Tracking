@@ -18,6 +18,34 @@ def multiply_value(value: float | None, quantity: float) -> float | None:
     return round(value * quantity, 2)
 
 
+UNIT_TO_GRAMS = {
+    "g": 1.0,
+    "gram": 1.0,
+    "grams": 1.0,
+    "oz": 28.3495,
+    "ounce": 28.3495,
+    "ounces": 28.3495,
+    "lb": 453.592,
+    "lbs": 453.592,
+    "tbsp": 14.0,
+    "tsp": 4.67,
+    "stick": 113.0,
+    "sticks": 113.0,
+    "cup": 240.0,
+    "cups": 240.0,
+}
+
+
+def serving_multiplier(quantity: float, unit: str | None, food: Food) -> float:
+    if not unit:
+        return quantity
+    normalized = unit.lower()
+    if normalized in UNIT_TO_GRAMS and food.grams_per_serving and food.grams_per_serving > 0:
+        grams = quantity * UNIT_TO_GRAMS[normalized]
+        return grams / food.grams_per_serving
+    return quantity
+
+
 class LoggingService:
     def __init__(self, resolver: FoodResolver | None = None) -> None:
         self.resolver = resolver or FoodResolver()
@@ -58,9 +86,47 @@ class LoggingService:
         session.flush()
 
         for item in request.items:
+            if item.selected_food_id is None:
+                session.add(
+                    MealEntryItem(
+                        meal_entry_id=meal_entry.id,
+                        food_id=None,
+                        parsed_phrase=item.parsed_phrase,
+                        normalized_phrase=normalize_text(item.parsed_phrase),
+                        quantity=item.quantity,
+                        unit=item.unit,
+                        quantity_text=item.quantity_text,
+                        resolution_status="unresolved",
+                        resolution_strategy="deferred",
+                        resolution_confidence=0.0,
+                        resolved_food_name=None,
+                        resolved_source=None,
+                        serving_description_snapshot=None,
+                        grams_per_serving_snapshot=None,
+                        calories_snapshot=0.0,
+                        protein_g_snapshot=0.0,
+                        carbs_g_snapshot=0.0,
+                        fat_g_snapshot=0.0,
+                        fiber_g_snapshot=None,
+                        net_carbs_g_snapshot=None,
+                    )
+                )
+                session.add(
+                    FoodResolutionHistory(
+                        phrase=item.parsed_phrase,
+                        normalized_phrase=normalize_text(item.parsed_phrase),
+                        food_id=None,
+                        resolution_strategy="unresolved",
+                        confidence=0.0,
+                        action_taken="deferred",
+                    )
+                )
+                continue
+
             food = session.get(Food, item.selected_food_id)
             if not food:
                 raise ValueError(f"Food {item.selected_food_id} not found")
+            multiplier = serving_multiplier(item.quantity, item.unit, food)
 
             meal_item = MealEntryItem(
                 meal_entry_id=meal_entry.id,
@@ -76,13 +142,13 @@ class LoggingService:
                 resolved_food_name=food.canonical_name,
                 resolved_source=food.source,
                 serving_description_snapshot=food.serving_description,
-                grams_per_serving_snapshot=multiply_value(food.grams_per_serving, item.quantity),
-                calories_snapshot=multiply_value(food.calories, item.quantity) or 0.0,
-                protein_g_snapshot=multiply_value(food.protein_g, item.quantity) or 0.0,
-                carbs_g_snapshot=multiply_value(food.carbs_g, item.quantity) or 0.0,
-                fat_g_snapshot=multiply_value(food.fat_g, item.quantity) or 0.0,
-                fiber_g_snapshot=multiply_value(food.fiber_g, item.quantity),
-                net_carbs_g_snapshot=multiply_value(food.net_carbs_g, item.quantity),
+                grams_per_serving_snapshot=multiply_value(food.grams_per_serving, multiplier),
+                calories_snapshot=multiply_value(food.calories, multiplier) or 0.0,
+                protein_g_snapshot=multiply_value(food.protein_g, multiplier) or 0.0,
+                carbs_g_snapshot=multiply_value(food.carbs_g, multiplier) or 0.0,
+                fat_g_snapshot=multiply_value(food.fat_g, multiplier) or 0.0,
+                fiber_g_snapshot=multiply_value(food.fiber_g, multiplier),
+                net_carbs_g_snapshot=multiply_value(food.net_carbs_g, multiplier),
             )
             session.add(meal_item)
             session.add(

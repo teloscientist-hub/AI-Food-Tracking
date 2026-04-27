@@ -8,22 +8,54 @@
 </head>
 <body>
   <div class="page-shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-kicker">MML</div>
-        <h1>Food Tracking</h1>
-      </div>
-      <nav class="nav">
-        <a href="/">Dashboard</a>
-        <a href="/log">Add Log Entry</a>
-        <a href="/foods">Foods Library</a>
-        <a href="/daily/{{ today_iso() }}">Daily Log</a>
-        <a href="/weekly">Weekly Trends</a>
-      </nav>
-    </aside>
     <main class="content">
       {% block content %}{% endblock %}
     </main>
   </div>
+  <script>
+    document.addEventListener("keydown", (event) => {
+      if (
+        event.key !== "Enter" ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      const tagName = target.tagName.toLowerCase();
+      if (
+        tagName === "textarea" ||
+        tagName === "select" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      if (tagName === "button" && target.getAttribute("type") === "submit") {
+        return;
+      }
+
+      const form = target.closest("form");
+      if (!form) {
+        return;
+      }
+
+      const primaryAction = form.querySelector('button.button.primary[type="submit"]:not([disabled])');
+      if (!(primaryAction instanceof HTMLButtonElement)) {
+        return;
+      }
+
+      event.preventDefault();
+      primaryAction.click();
+    });
+  </script>
 </body>
 </html>

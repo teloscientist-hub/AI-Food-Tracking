@@ -4,9 +4,10 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from app.models import DailyNote, DailyTarget, Food, FoodResolutionHistory, MealEntry, MealEntryItem
+from app.models import DailyNote, DailyTarget, ExerciseCheckIn, Food, FoodResolutionHistory, MealEntry, MealEntryItem
 
 
 class SummaryService:
@@ -172,9 +173,19 @@ class SummaryService:
             select(func.count()).select_from(MealEntryItem).where(MealEntryItem.resolution_status != "resolved")
         ) or 0
         note_body = self.get_daily_note(session, target_date)
+        try:
+            exercise_checkin = session.scalar(select(ExerciseCheckIn).where(ExerciseCheckIn.checkin_date == target_date))
+        except OperationalError:
+            exercise_checkin = None
         return {
             "custom_food_count": int(custom_food_count),
             "remembered_phrases": int(remembered_phrases),
             "unresolved_count": int(unresolved_count),
             "daily_note": note_body,
+            "exercise_checkin": {
+                "did_zone2": exercise_checkin.did_zone2 if exercise_checkin else False,
+                "zone4_minutes": exercise_checkin.zone4_minutes if exercise_checkin and exercise_checkin.zone4_minutes is not None else 0,
+                "did_push_workout": exercise_checkin.did_push_workout if exercise_checkin else False,
+                "did_pull_workout": exercise_checkin.did_pull_workout if exercise_checkin else False,
+            },
         }

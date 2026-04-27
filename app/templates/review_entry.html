@@ -15,7 +15,7 @@
     <input type="hidden" name="item_count" value="{{ review|length }}">
     <input type="hidden" name="candidate_json" value="{{ candidate_json }}">
     {% for item in review %}
-    <article class="review-card">
+    <article class="review-card" data-review-index="{{ loop.index0 }}">
       <div class="review-head">
         <div>
           <strong>{{ item.parsed_item.quantity }} {{ item.parsed_item.unit or "" }} {{ item.parsed_item.phrase }}</strong>
@@ -31,22 +31,42 @@
       <input type="hidden" name="quantity_text_{{ loop.index0 }}" value="{{ item.parsed_item.quantity_text or '' }}">
       <label>
         <span>Food match</span>
-        <select name="selected_food_id_{{ loop.index0 }}" required>
+        <select name="selected_food_id_{{ loop.index0 }}" data-candidate-select="{{ loop.index0 }}">
           {% if not item.candidates %}
-          <option value="">Unresolved</option>
+          <option value="unresolved" selected>Save as unresolved</option>
+          {% elif item.status == "unresolved" %}
+          <option value="unresolved" selected>Save as unresolved</option>
+          {% else %}
+          <option value="unresolved">Save as unresolved</option>
           {% endif %}
           {% for candidate in item.candidates %}
-          <option value="{% if candidate.food_id %}food:{{ candidate.food_id }}{% else %}external:{{ loop.index0 }}{% endif %}" {% if item.chosen and item.chosen.canonical_name == candidate.canonical_name %}selected{% endif %}>
+          <option value="{% if candidate.food_id %}food:{{ candidate.food_id }}{% else %}external:{{ loop.index0 }}{% endif %}" {% if (item.chosen and item.chosen.canonical_name == candidate.canonical_name) or (not item.chosen and loop.first and item.status != "unresolved") %}selected{% endif %}>
             {{ candidate.canonical_name }} {% if candidate.brand %}({{ candidate.brand }}){% endif %} - {{ candidate.source }} - confidence {{ "%.2f"|format(candidate.confidence) }}
           </option>
           {% endfor %}
         </select>
       </label>
+      {% set preview = item.chosen if item.chosen else (item.candidates[0] if item.candidates else none) %}
+      {% if preview %}
+      {% set source_label = preview.source %}
+      {% if "usda_branded" in preview.strategy %}
+      {% set source_label = "usda branded" %}
+      {% elif preview.source == "usda" %}
+      {% set source_label = "usda generic" %}
+      {% endif %}
+      <div class="candidate-preview" data-candidate-preview="{{ loop.index0 }}">
+        <div><span>Source</span><strong data-preview-source>{{ source_label }}</strong></div>
+        <div><span>Strategy</span><strong data-preview-strategy>{{ preview.strategy }}</strong></div>
+        <div><span>Serving</span><strong data-preview-serving>{{ preview.serving_description }}</strong></div>
+        <div><span>Macros</span><strong data-preview-macros>{{ preview.calories }} kcal · P {{ preview.protein_g }} · C {{ preview.carbs_g }} · F {{ preview.fat_g }}</strong></div>
+      </div>
+      {% endif %}
       <label class="inline">
         <input type="checkbox" name="always_map_{{ loop.index0 }}" value="1">
         <span>Always map this phrase in the future</span>
       </label>
       {% if item.status == "unresolved" or not item.candidates or (item.candidates and item.candidates[0].food_id is none) %}
+      <p class="subtle">This line can still be saved now and resolved later.</p>
       <a class="button secondary" href="/foods/custom/new?prefill_phrase={{ item.parsed_item.phrase }}">Create custom food</a>
       {% endif %}
     </article>
@@ -54,4 +74,75 @@
     <button class="button primary" type="submit">Save meal entry</button>
   </form>
 </section>
+<script>
+  (() => {
+    const candidateGroups = JSON.parse({{ candidate_json|tojson }});
+
+    function sourceLabel(candidate) {
+      if (candidate.strategy && candidate.strategy.startsWith("usda_branded")) {
+        return "usda branded";
+      }
+      if (candidate.source === "usda") {
+        return "usda generic";
+      }
+      return candidate.source || "";
+    }
+
+    function macroLabel(candidate) {
+      return `${candidate.calories} kcal · P ${candidate.protein_g} · C ${candidate.carbs_g} · F ${candidate.fat_g}`;
+    }
+
+    document.querySelectorAll("[data-candidate-select]").forEach((selectElement) => {
+      if (!(selectElement instanceof HTMLSelectElement)) {
+        return;
+      }
+
+      const reviewIndex = Number(selectElement.dataset.candidateSelect);
+      const preview = document.querySelector(`[data-candidate-preview="${reviewIndex}"]`);
+      if (!(preview instanceof HTMLElement)) {
+        return;
+      }
+
+      const sourceNode = preview.querySelector("[data-preview-source]");
+      const strategyNode = preview.querySelector("[data-preview-strategy]");
+      const servingNode = preview.querySelector("[data-preview-serving]");
+      const macrosNode = preview.querySelector("[data-preview-macros]");
+      if (!(sourceNode instanceof HTMLElement) || !(strategyNode instanceof HTMLElement) || !(servingNode instanceof HTMLElement) || !(macrosNode instanceof HTMLElement)) {
+        return;
+      }
+
+      const updatePreview = () => {
+        const value = selectElement.value || "";
+        if (!value.startsWith("external:")) {
+          return;
+        }
+        const candidateIndex = Number(value.split(":")[1]);
+        const candidate = candidateGroups?.[reviewIndex]?.[candidateIndex];
+        if (!candidate) {
+          return;
+        }
+        sourceNode.textContent = sourceLabel(candidate);
+        strategyNode.textContent = candidate.strategy || "";
+        servingNode.textContent = candidate.serving_description || "";
+        macrosNode.textContent = macroLabel(candidate);
+      };
+
+      selectElement.addEventListener("change", updatePreview);
+      selectElement.addEventListener("keyup", (event) => {
+        if (event.key !== "Enter") {
+          return;
+        }
+        const form = selectElement.closest("form");
+        if (!(form instanceof HTMLFormElement)) {
+          return;
+        }
+        const primaryAction = form.querySelector('button.button.primary[type="submit"]:not([disabled])');
+        if (!(primaryAction instanceof HTMLButtonElement)) {
+          return;
+        }
+        primaryAction.click();
+      });
+    });
+  })();
+</script>
 {% endblock %}

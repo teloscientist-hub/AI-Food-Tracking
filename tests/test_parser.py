@@ -23,3 +23,26 @@ def test_parse_entry_defaults_to_single_serving_for_natural_language() -> None:
     assert items[0].phrase == "protein coffee"
     assert items[1].phrase == "my yogurt bowl"
 
+
+def test_parse_entry_preserves_food_names_with_and_inside_phrase() -> None:
+    items = parse_entry("1.5 oz of Kirkland shredded cheddar and jack mix")
+
+    assert len(items) == 1
+    assert items[0].quantity == 1.5
+    assert items[0].unit == "oz"
+    assert items[0].phrase == "Kirkland shredded cheddar and jack mix"
+
+
+def test_parse_entry_handles_spelled_numbers_and_phrase_cleanup() -> None:
+    items = parse_entry(
+        '- Five eggs - 1/32 of a stick of butter - 1 ratio Brand 25 g blueberry probiotic yogurt - 1 Reese\'s brand protein bar "One" with 18 g of protein'
+    )
+
+    assert len(items) == 4
+    assert items[0].quantity == 5
+    assert items[0].phrase == "eggs"
+    assert items[1].quantity == 1 / 32
+    assert items[1].unit == "stick"
+    assert items[1].phrase == "butter"
+    assert items[2].phrase == "ratio 25 g blueberry probiotic yogurt"
+    assert items[3].phrase == "Reese's protein bar \"One\""

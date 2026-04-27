@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 
 import httpx
 
@@ -36,16 +37,27 @@ class USDAClient:
         return bool(self.settings.usda_api_key)
 
     def search(self, phrase: str, limit: int = 5) -> list[ExternalFoodCandidate]:
+        return self._search(phrase, limit=limit, data_types=None)
+
+    def search_branded(self, phrase: str, limit: int = 5) -> list[ExternalFoodCandidate]:
+        return self._search(phrase, limit=limit, data_types=["Branded"])
+
+    def _search(
+        self,
+        phrase: str,
+        limit: int = 5,
+        data_types: list[str] | None = None,
+    ) -> list[ExternalFoodCandidate]:
         if not self.is_enabled():
             return []
-        params = {
-            "api_key": self.settings.usda_api_key,
-            "query": phrase,
-            "pageSize": limit,
-        }
+        params = {"api_key": self.settings.usda_api_key}
+        payload: dict[str, object] = {"query": phrase, "pageSize": limit}
+        if data_types:
+            payload["dataType"] = data_types
         try:
-            with httpx.Client(timeout=8.0) as client:
-                response = client.get(self.base_url, params=params)
+            timeout = httpx.Timeout(connect=1.5, read=2.5, write=2.5, pool=1.5)
+            with httpx.Client(timeout=timeout) as client:
+                response = client.post(self.base_url, params=params, json=payload)
                 response.raise_for_status()
                 payload = response.json()
         except Exception:
@@ -57,11 +69,23 @@ class USDAClient:
             nutrients = {n.get("nutrientName"): n.get("value") for n in item.get("foodNutrients", [])}
             name = item.get("description") or "USDA Food"
             brand = item.get("brandOwner")
-            score = 0.55
-            if normalize_text(name) == normalized_phrase:
+            normalized_name = normalize_text(name)
+            normalized_brand = normalize_text(brand or "")
+            score = 0.45 + (SequenceMatcher(None, normalized_phrase, normalized_name).ratio() * 0.35)
+            if normalized_name == normalized_phrase:
                 score = 0.96
-            elif normalized_phrase in normalize_text(name):
+            elif normalized_phrase in normalized_name:
                 score = 0.82
+            phrase_tokens = set(normalized_phrase.split())
+            name_tokens = set(normalized_name.split())
+            brand_tokens = set(normalized_brand.split())
+            overlap = len(phrase_tokens & name_tokens)
+            if overlap:
+                score += min(0.12, overlap * 0.03)
+            if phrase_tokens & brand_tokens:
+                score += 0.08
+            if brand:
+                score += 0.03
             results.append(
                 ExternalFoodCandidate(
                     canonical_name=name.title(),
@@ -79,8 +103,7 @@ class USDAClient:
                     else None,
                     net_carbs_g=None,
                     raw_source_payload=item,
-                    score=score,
+                    score=min(0.99, score),
                 )
             )
         return results
-

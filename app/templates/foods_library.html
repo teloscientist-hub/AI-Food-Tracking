@@ -23,12 +23,16 @@
     {% endfor %}
   </div>
   <div class="picker-preview-list">
-    {% for food in foods %}
+    {% for card in food_cards %}
+    {% set food = card.food %}
     <div class="picker-row full-row">
       <div class="picker-main">
         <strong><a href="/foods/{{ food.id }}">{{ food.canonical_name }}</a></strong>
         <span>{{ food.serving_description }}{% if food.grams_per_serving %} / {{ food.grams_per_serving }}g{% endif %}</span>
-        <small>{{ food.source }}{% if food.brand %} · {{ food.brand }}{% endif %}</small>
+        <small>
+          {{ food.source }}{% if food.brand %} · {{ food.brand }}{% endif %}
+          {% if card.log_count > 0 %} · logged {{ card.log_count }}x{% endif %}
+        </small>
       </div>
       <div class="picker-macros">
         <span class="coral-text">{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}g</span>

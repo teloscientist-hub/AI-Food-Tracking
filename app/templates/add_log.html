@@ -1,28 +1,45 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="hero">
-  <div>
-    <p class="eyebrow">Conversational logging</p>
-    <h2>Add Log Entry</h2>
-    <p class="subtle">Type a natural line, review ambiguous matches, or jump into saved foods when you want a picker-style flow.</p>
+<section class="dashboard-topbar">
+  <div class="dashboard-topbar-left">
+    <div>
+      <p class="eyebrow">Conversational logging</p>
+      <h2>Add Log Entry</h2>
+    </div>
   </div>
-  <a class="button outline" href="/foods">Browse foods</a>
+  <div class="dashboard-date-pill">
+    <span>&lsaquo;</span>
+    <strong>{{ (logged_at or today)[:10] }}</strong>
+    <span>&rsaquo;</span>
+  </div>
 </section>
-<section class="grid two-up">
-  <article class="panel">
+
+<section class="log-layout">
+  <article class="panel log-entry-panel">
+    {% if error %}
+    <div class="save-banner picker-inline-banner">
+      <strong>Entry required</strong>
+      <span>{{ error }}</span>
+    </div>
+    {% endif %}
     <form action="/log/review" method="post" class="stack">
+      <input type="hidden" name="redirect_to" value="/log">
       <label>
         <span>Entry text</span>
-        <textarea name="raw_input_text" rows="6" placeholder="2 eggs, 3 bacon, 1 Fairlife 42, 1 tbsp butter"></textarea>
+        <textarea name="raw_input_text" rows="6" placeholder="2 eggs, 3 bacon, 1 Fairlife 42, 1 tbsp butter" required></textarea>
       </label>
       <div class="form-grid">
         <label>
           <span>Meal label</span>
-          <input type="text" name="meal_label" value="Breakfast">
+          <select name="meal_label">
+            {% for option in meal_options %}
+            <option value="{{ option }}" {% if meal_label == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
         </label>
         <label>
           <span>Logged at</span>
-          <input type="datetime-local" name="logged_at" value="{{ today }}">
+          <input type="datetime-local" name="logged_at" value="{{ logged_at or today }}">
         </label>
       </div>
       <div class="quick-chips">
@@ -33,33 +50,90 @@
       <button class="button primary" type="submit">Parse and review</button>
     </form>
   </article>
-  <article class="panel picker-preview">
+  <article class="panel picker-preview log-picker-panel">
     <div class="panel-header">
       <h3>Picker-style add</h3>
-      <span class="mini-link">Preview</span>
+      <span class="mini-link">Embedded</span>
     </div>
-    <div class="picker-search-shell">Search foods and servings...</div>
-    <div class="picker-preview-list">
-      {% for item in [
-        {"name": "Fairlife Core Power Elite 42g", "serving": "1 bottle", "net": "9g", "protein": "42g", "fat": "3.5g", "cals": "230", "tag": "My Food"},
-        {"name": "Protein Coffee", "serving": "1 mug", "net": "6g", "protein": "30g", "fat": "4g", "cals": "180", "tag": "My Recipe"},
-        {"name": "Egg", "serving": "1 egg", "net": "0.4g", "protein": "6g", "fat": "5g", "cals": "72", "tag": "Common"}
-      ] %}
-      <div class="picker-row">
+    {% if saved %}
+    <div class="save-banner picker-inline-banner">
+      <strong>Added to {{ meal_label }}</strong>
+      <span>{{ saved }}</span>
+    </div>
+    {% endif %}
+    <form method="get" class="picker-settings embedded-picker-settings">
+      <div class="picker-inline-toolbar">
+        <label class="picker-search-field">
+          <span>Search</span>
+          <input type="text" name="q" value="{{ q }}" placeholder="Search foods and servings..." autocomplete="off">
+        </label>
+        <button class="button primary" type="submit">Search</button>
+      </div>
+      <div class="form-grid compact-grid">
+        <label>
+          <span>Meal</span>
+          <select name="meal_label">
+            {% for option in meal_options %}
+            <option value="{{ option }}" {% if meal_label == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>Logged at</span>
+          <input type="datetime-local" name="logged_at" value="{{ logged_at }}">
+        </label>
+      </div>
+      <div class="toggle-row picker-toggle-bar">
+        {% for option in ["all","custom","usda","openfoodfacts"] %}
+        <button class="chip {% if source == option %}active{% endif %}" type="submit" name="source" value="{{ option }}">{{ option }}</button>
+        {% endfor %}
+      </div>
+    </form>
+    <div class="picker-preview-list embedded-picker-list">
+      {% for item in picker_foods %}
+      {% set food = item.food %}
+      <div class="picker-row picker-row-inline">
+        <div class="picker-thumb">
+          {% if food.image_url %}
+          <img src="{{ food.image_url }}" alt="{{ food.canonical_name }}">
+          {% else %}
+          <span>{{ food.canonical_name[:1] }}</span>
+          {% endif %}
+        </div>
         <div class="picker-main">
-          <strong>{{ item.name }}</strong>
-          <span>{{ item.serving }}</span>
-          <small>{{ item.tag }}</small>
+          <strong><a href="/foods/{{ food.id }}">{{ food.canonical_name }}</a></strong>
+          <span>{{ item.quick_label }}</span>
+          <small>{{ food.brand or food.source|replace("openfoodfacts", "Open Food Facts")|title }}</small>
         </div>
-        <div class="picker-macros">
-          <span class="coral-text">{{ item.net }}</span>
-          <span class="blue-text">{{ item.protein }}</span>
-          <span class="gold-text">{{ item.fat }}</span>
-          <strong>{{ item.cals }}</strong>
+        <div class="picker-macros compact-macros">
+          <span class="coral-text">{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}g</span>
+          <span class="blue-text">{{ food.protein_g }}g</span>
+          <span class="gold-text">{{ food.fat_g }}g</span>
+          <strong>{{ food.calories }}</strong>
         </div>
+        <form action="/log/picker/add" method="post" class="picker-inline-add-form">
+          <input type="hidden" name="food_id" value="{{ food.id }}">
+          <input type="hidden" name="unit" value="{{ item.quick_unit or '' }}">
+          <input type="hidden" name="meal_label" value="{{ meal_label }}">
+          <input type="hidden" name="logged_at" value="{{ logged_at }}">
+          <input type="hidden" name="q" value="{{ q }}">
+          <input type="hidden" name="source" value="{{ source }}">
+          <input type="hidden" name="redirect_to" value="/log">
+          <label>
+            <span>Qty</span>
+            <input type="number" name="quantity" value="{{ item.quick_quantity }}" min="0.001" step="0.001">
+          </label>
+          <button class="icon-add-button" type="submit" aria-label="Add {{ food.canonical_name }}">+</button>
+        </form>
+      </div>
+      {% else %}
+      <div class="muted-panel">
+        <strong>No foods found</strong>
+        <p>Try a broader search or create a custom food.</p>
       </div>
       {% endfor %}
     </div>
+    <a class="button secondary" href="/log/picker?meal_label={{ meal_label }}">Open full picker</a>
   </article>
 </section>
 {% endblock %}

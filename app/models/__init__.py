@@ -1,5 +1,9 @@
 from app.models.entities import (
     CustomFoodMetadata,
+    ExerciseCheckIn,
+    ExerciseGoal,
+    HealthGoal,
+    HealthMeasurement,
     DailyNote,
     DailyTarget,
     Food,
@@ -11,6 +15,10 @@ from app.models.entities import (
 
 __all__ = [
     "CustomFoodMetadata",
+    "ExerciseCheckIn",
+    "ExerciseGoal",
+    "HealthGoal",
+    "HealthMeasurement",
     "DailyNote",
     "DailyTarget",
     "Food",

@@ -36,6 +36,7 @@ class FoodRead(FoodBase):
     id: int
     source: str
     source_food_id: str | None = None
+    image_url: str | None = None
     version: int
     is_current: bool
     food_group_key: str | None = None
@@ -53,4 +54,3 @@ class FoodSearchResult(BaseModel):
 
 class AliasCreate(BaseModel):
     phrase: str
-
