@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
+{% set page_title = "Review Parsed Entry" %}
+{% set page_kicker = "Confirm matches" %}
+{% set nav_active = "daily" %}
+{% set page_date = today_iso() %}
+{% include "_page_topbar.html" %}
 <section class="hero">
   <div>
-    <p class="eyebrow">Confirm matches</p>
-    <h2>Review Parsed Entry</h2>
     <p class="subtle">{{ raw_input_text }}</p>
   </div>
 </section>
@@ -26,12 +29,30 @@
         {% endif %}
       </div>
       <input type="hidden" name="parsed_phrase_{{ loop.index0 }}" value="{{ item.parsed_item.phrase }}">
-      <input type="hidden" name="quantity_{{ loop.index0 }}" value="{{ item.parsed_item.quantity }}">
-      <input type="hidden" name="unit_{{ loop.index0 }}" value="{{ item.parsed_item.unit or '' }}">
-      <input type="hidden" name="quantity_text_{{ loop.index0 }}" value="{{ item.parsed_item.quantity_text or '' }}">
+      <label>
+        <span>Amount</span>
+        <div class="form-grid compact-grid">
+          <input
+            type="number"
+            name="quantity_{{ loop.index0 }}"
+            value="{{ item.parsed_item.quantity }}"
+            min="0.001"
+            step="0.001"
+            data-quantity-input="{{ loop.index0 }}"
+          >
+          <input
+            type="text"
+            name="unit_{{ loop.index0 }}"
+            value="{{ item.parsed_item.unit or '' }}"
+            placeholder="serving / oz / tbsp"
+          >
+        </div>
+      </label>
+      <input type="hidden" name="quantity_text_{{ loop.index0 }}" value="{{ item.parsed_item.quantity_text or item.parsed_item.quantity }}">
       <label>
         <span>Food match</span>
         <select name="selected_food_id_{{ loop.index0 }}" data-candidate-select="{{ loop.index0 }}">
+          <option value="exclude">Don't include</option>
           {% if not item.candidates %}
           <option value="unresolved" selected>Save as unresolved</option>
           {% elif item.status == "unresolved" %}
@@ -65,9 +86,23 @@
         <input type="checkbox" name="always_map_{{ loop.index0 }}" value="1">
         <span>Always map this phrase in the future</span>
       </label>
+      <div class="toggle-row">
+        {% if item.candidates %}
+        <button
+          class="button outline"
+          type="submit"
+          formaction="/log/save-custom"
+          formmethod="post"
+          name="save_custom_index"
+          value="{{ loop.index0 }}"
+        >
+          Save as custom food
+        </button>
+        {% endif %}
+        <a class="button secondary" href="/foods/custom/new?prefill_phrase={{ item.parsed_item.phrase }}">Create custom food</a>
+      </div>
       {% if item.status == "unresolved" or not item.candidates or (item.candidates and item.candidates[0].food_id is none) %}
       <p class="subtle">This line can still be saved now and resolved later.</p>
-      <a class="button secondary" href="/foods/custom/new?prefill_phrase={{ item.parsed_item.phrase }}">Create custom food</a>
       {% endif %}
     </article>
     {% endfor %}
@@ -107,12 +142,24 @@
       const strategyNode = preview.querySelector("[data-preview-strategy]");
       const servingNode = preview.querySelector("[data-preview-serving]");
       const macrosNode = preview.querySelector("[data-preview-macros]");
+      const quantityInput = document.querySelector(`[data-quantity-input="${reviewIndex}"]`);
+      const quantityTextInput = document.querySelector(`input[name="quantity_text_${reviewIndex}"]`);
       if (!(sourceNode instanceof HTMLElement) || !(strategyNode instanceof HTMLElement) || !(servingNode instanceof HTMLElement) || !(macrosNode instanceof HTMLElement)) {
         return;
       }
 
+      const scaleValue = (value, quantity) => {
+        const numeric = Number(value || 0);
+        const scaled = numeric * quantity;
+        return Math.round(scaled * 100) / 100;
+      };
+
       const updatePreview = () => {
         const value = selectElement.value || "";
+        const quantity = quantityInput instanceof HTMLInputElement ? Math.max(Number(quantityInput.value || "1"), 0) : 1;
+        if (quantityTextInput instanceof HTMLInputElement && quantityInput instanceof HTMLInputElement) {
+          quantityTextInput.value = quantityInput.value;
+        }
         if (!value.startsWith("external:")) {
           return;
         }
@@ -124,10 +171,11 @@
         sourceNode.textContent = sourceLabel(candidate);
         strategyNode.textContent = candidate.strategy || "";
         servingNode.textContent = candidate.serving_description || "";
-        macrosNode.textContent = macroLabel(candidate);
+        macrosNode.textContent = `${scaleValue(candidate.calories, quantity)} kcal · P ${scaleValue(candidate.protein_g, quantity)} · C ${scaleValue(candidate.carbs_g, quantity)} · F ${scaleValue(candidate.fat_g, quantity)}`;
       };
 
       selectElement.addEventListener("change", updatePreview);
+      quantityInput?.addEventListener("input", updatePreview);
       selectElement.addEventListener("keyup", (event) => {
         if (event.key !== "Enter") {
           return;
@@ -142,6 +190,7 @@
         }
         primaryAction.click();
       });
+      updatePreview();
     });
   })();
 </script>

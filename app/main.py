@@ -14,6 +14,7 @@ from app.routers.api_resolution import router as resolution_api_router
 from app.routers.api_summary import router as summary_api_router
 from app.routers.web import router as web_router
 from app.routers.web import templates
+from app.services.food_icons import food_icon_symbol
 from app.services.food_service import seed_demo_data
 
 
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI):
 settings = get_settings()
 app = FastAPI(title=settings.project_name, lifespan=lifespan)
 templates.env.globals["today_iso"] = lambda: date.today().isoformat()
+templates.env.globals["food_icon_symbol"] = food_icon_symbol
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 app.include_router(web_router)

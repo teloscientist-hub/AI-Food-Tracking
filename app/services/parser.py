@@ -15,6 +15,18 @@ KNOWN_UNITS = {
     "lbs",
     "cup",
     "cups",
+    "container",
+    "containers",
+    "bottle",
+    "bottles",
+    "package",
+    "packages",
+    "can",
+    "cans",
+    "link",
+    "links",
+    "patty",
+    "patties",
     "tbsp",
     "tsp",
     "slice",
@@ -98,6 +110,7 @@ def clean_phrase_tokens(tokens: list[str]) -> list[str]:
         cleaned = cleaned[1:]
 
     phrase = " ".join(cleaned)
+    phrase = re.sub(r"\b\d+\s*count\b", "", phrase, flags=re.IGNORECASE)
     phrase = re.sub(r"\bbrand\b", "", phrase, flags=re.IGNORECASE)
     phrase = re.sub(r"\bwith\s+\d+(?:\.\d+)?\s*g\s+of\s+protein\b", "", phrase, flags=re.IGNORECASE)
     phrase = re.sub(r"\bwith\s+\d+(?:\.\d+)?\s*grams?\s+of\s+protein\b", "", phrase, flags=re.IGNORECASE)
@@ -119,6 +132,15 @@ def parse_food_phrase(segment: str) -> ParsedFoodItem:
         start_idx = 1
         while start_idx < len(tokens) and tokens[start_idx].lower() in FILLER_TOKENS:
             start_idx += 1
+        if start_idx < len(tokens):
+            compound_match = re.match(r"^(\d+(?:\.\d+)?)[- ]?(g|gram|grams|oz|ounce|ounces|lb|lbs|cup|cups|tbsp|tsp)\b$", tokens[start_idx], flags=re.IGNORECASE)
+            if compound_match:
+                quantity = float(compound_match.group(1))
+                unit = compound_match.group(2).lower()
+                quantity_text = tokens[start_idx]
+                start_idx += 1
+                while start_idx < len(tokens) and tokens[start_idx].lower() in FILLER_TOKENS:
+                    start_idx += 1
         if start_idx < len(tokens) and tokens[start_idx].lower() in KNOWN_UNITS:
             unit = tokens[start_idx].lower()
             start_idx += 1

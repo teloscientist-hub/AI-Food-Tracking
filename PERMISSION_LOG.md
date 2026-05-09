@@ -2,6 +2,17 @@
 
 This file tracks command approvals relevant to the `mml-food-tracking` project so we can decide which ones should become persistent auto-approvals.
 
+Project-local policy files:
+- `AUTO_PERMISSIONS.toml`
+- `AGENTS.md`
+
+These files tell future Codex sessions in this repo to check the local allowlist first before asking for approval. They do not override the Codex app’s built-in approval prompts by themselves.
+
+Project-local edit rule:
+- The user has preapproved creating and editing any file inside this project folder as needed for the work.
+- This covers project files like HTML, CSS, JS, Python, tests, docs, and local policy files.
+- This does not grant broader filesystem permissions outside the project root or override the Codex app’s sandbox rules.
+
 Notes:
 - Only narrow, scoped command prefixes should be auto-approved.
 - Broad interpreters like `python3`, `python`, `bash`, or `zsh` should not be blanket-approved.
@@ -20,6 +31,10 @@ Notes:
 | `python3 -m venv .venv` | approved | Safe project bootstrap command. |
 | `python3 -m pip install ...` | approved | Dependency installation for this repo. |
 | `.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port ...` | approved | Safe local app run pattern for this project. |
+| `ls -la` | approved | Used while setting up the local project permission policy files. |
+| `test -f AGENTS.md` | approved | Used to check whether the repo already had project agent instructions. |
+| `sed -n ...` | approved | Used to inspect `PERMISSION_LOG.md`, `AGENTS.md`, and `~/.codex/config.toml` during permission setup. |
+| `rg -n ...` | approved | Used to inspect Codex global state/config for any file-based approval storage. |
 | `git add .` | approved | Useful but broad inside repo; still acceptable for this project. |
 | `git add -A` | approved | Same caveat as `git add .`. |
 | `git commit -m ...` | approved | Standard non-interactive commit flow. |
@@ -66,6 +81,11 @@ Append new permission requests here as they come up:
 | 2026-04-24 | `.venv/bin/pytest tests/test_off_client.py tests/test_resolution.py` | OFF + resolver verification | pending | Useful when tuning external sources. |
 | 2026-04-25 | `.venv/bin/pytest tests/test_web_submit.py` | Review submit / blank-input verification | pending | Useful targeted web regression command. |
 | 2026-04-25 | `.venv/bin/pytest tests/test_picker_foods.py` | Picker/library ordering verification | pending | Useful targeted picker regression command. |
+| 2026-05-02 | `ls -la` | Inspect project root before creating local permission policy files | approved | Used to place `AUTO_PERMISSIONS.toml` and `AGENTS.md` correctly. |
+| 2026-05-02 | `test -f AGENTS.md` | Check whether project already had agent instructions | approved | Confirmed no existing file before creation. |
+| 2026-05-02 | `sed -n ...` | Inspect `PERMISSION_LOG.md`, `AGENTS.md`, and `~/.codex/config.toml` | approved | Used to build the project-local permission policy. |
+| 2026-05-02 | `rg -n ...` | Search Codex config/global state for approval records | approved | Confirmed there is no user-editable global auto-approval file. |
+| 2026-05-02 | Project file create/edit within repo root | Create and edit any project file needed for the work | approved | User preapproved creating and editing files anywhere inside the project folder. |
 
 ## Recommended Auto-Approve Set
 
@@ -90,4 +110,4 @@ These are the narrow prefixes most worth approving for this project:
 
 - I did not find a user-editable Codex “auto-approve commands” file in `~/.codex`.
 - The actual persistent approval list appears to be managed by the Codex app/UI rather than a plain local config file we can safely patch here.
-- This log is therefore the project-side source of truth for what should be added in the UI.
+- This log plus `AUTO_PERMISSIONS.toml` are therefore the project-side source of truth for what should be added in the UI.

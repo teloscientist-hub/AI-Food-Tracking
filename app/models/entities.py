@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -21,6 +21,10 @@ class Food(Base):
     brand: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     source: Mapped[str] = mapped_column(String(50), index=True)
     source_food_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    image_content_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    icon_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     serving_description: Mapped[str] = mapped_column(String(255), default="1 serving")
     grams_per_serving: Mapped[float] = mapped_column(Float, default=1.0)
     calories: Mapped[float] = mapped_column(Float, default=0.0)
@@ -108,6 +112,7 @@ class MealEntryItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
     meal_entry: Mapped["MealEntry"] = relationship("MealEntry", back_populates="items")
+    food: Mapped["Food | None"] = relationship("Food")
 
 
 class DailyTarget(Base):
@@ -188,6 +193,7 @@ class ExerciseCheckIn(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     checkin_date: Mapped[date] = mapped_column(Date, unique=True, index=True)
     did_zone2: Mapped[bool] = mapped_column(Boolean, default=False)
+    zone2_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)
     zone4_minutes: Mapped[float | None] = mapped_column(Float, nullable=True)
     did_push_workout: Mapped[bool] = mapped_column(Boolean, default=False)
     did_pull_workout: Mapped[bool] = mapped_column(Boolean, default=False)

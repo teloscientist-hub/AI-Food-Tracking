@@ -46,3 +46,19 @@ def test_parse_entry_handles_spelled_numbers_and_phrase_cleanup() -> None:
     assert items[1].phrase == "butter"
     assert items[2].phrase == "ratio 25 g blueberry probiotic yogurt"
     assert items[3].phrase == "Reese's protein bar \"One\""
+
+
+def test_parse_entry_handles_brand_phrase_and_compound_weight_token() -> None:
+    items = parse_entry(
+        "- Wilde Protein Chips 50 count\n- 2 containers of Dannon light and fit\n- 1 5-oz banana"
+    )
+
+    assert len(items) == 3
+    assert items[0].quantity == 1.0
+    assert items[0].phrase == "Wilde Protein Chips"
+    assert items[1].quantity == 2.0
+    assert items[1].unit == "containers"
+    assert items[1].phrase == "Dannon light and fit"
+    assert items[2].quantity == 5.0
+    assert items[2].unit == "oz"
+    assert items[2].phrase == "banana"

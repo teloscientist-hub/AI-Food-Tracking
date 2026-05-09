@@ -74,8 +74,11 @@ def test_picker_foods_prefers_recent_logged_foods_and_last_amount(session) -> No
     assert cards[0]["food"].id == second.id
     assert cards[0]["quick_quantity"] == 5.0
     assert cards[0]["quick_unit"] == "oz"
+    assert [option["value"] for option in cards[0]["unit_options"]][:3] == ["oz", "egg", "g"]
     assert cards[1]["food"].id == first.id
     assert cards[2]["food"].id == third.id
+    assert cards[2]["quick_unit"] == "tbsp"
+    assert cards[2]["unit_options"][0]["value"] == "tbsp"
 
 
 def test_picker_foods_exposes_image_url_from_source_payload(session) -> None:
@@ -162,3 +165,63 @@ def test_food_library_prefers_higher_log_count_then_recency(session) -> None:
     assert cards[1]["food"].id == bacon.id
     assert cards[1]["log_count"] == 1
     assert cards[2]["food"].id == butter.id
+
+
+def test_food_library_surfaces_recent_custom_food_creation_above_older_logged_items(session) -> None:
+    butter = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Butter",
+            serving_description="1 tbsp",
+            grams_per_serving=14,
+            calories=102,
+            protein_g=0.1,
+            carbs_g=0,
+            fat_g=11.5,
+        ),
+    )
+    egg = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Egg",
+            serving_description="1 egg",
+            grams_per_serving=50,
+            calories=72,
+            protein_g=6,
+            carbs_g=0.4,
+            fat_g=5,
+        ),
+    )
+
+    old_entry = MealEntry(raw_input_text="butter", meal_label="Breakfast", logged_at=datetime.now(UTC) - timedelta(days=2))
+    newer_entry = MealEntry(raw_input_text="egg", meal_label="Breakfast", logged_at=datetime.now(UTC) - timedelta(days=1))
+    session.add_all([old_entry, newer_entry])
+    session.flush()
+    session.add_all(
+        [
+            MealEntryItem(meal_entry_id=old_entry.id, food_id=butter.id, parsed_phrase="butter", normalized_phrase="butter", quantity=1.0, unit=None),
+            MealEntryItem(meal_entry_id=newer_entry.id, food_id=egg.id, parsed_phrase="egg", normalized_phrase="egg", quantity=1.0, unit=None),
+        ]
+    )
+    session.commit()
+
+    custom = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Kirkland Shredded Cheddar and Jack Mix",
+            brand="Kirkland",
+            serving_description="1 oz",
+            grams_per_serving=28,
+            calories=110,
+            protein_g=7,
+            carbs_g=1,
+            fat_g=9,
+            aliases=["kirkland cheese"],
+            authoritative_locked=True,
+        ),
+    )
+
+    cards = get_food_library_cards(session)
+
+    assert cards[0]["food"].id == custom.id
+    assert cards[1]["food"].id == egg.id

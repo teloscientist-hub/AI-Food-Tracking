@@ -1,14 +1,59 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import re
 from uuid import uuid4
 
+import httpx
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import CustomFoodMetadata, Food, FoodAlias, MealEntry, MealEntryItem
 from app.schemas.foods import FoodCreate, FoodRead, FoodUpdate
+from app.services.food_icons import food_icon_symbol
 from app.services.parser import normalize_text
+
+
+GRAM_UNIT_OPTIONS = [
+    ("g", "grams"),
+    ("oz", "oz"),
+]
+
+
+def _source_payload_image_url(payload: dict | None) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    direct_keys = ["image_url", "image_front_url", "image_small_url"]
+    for key in direct_keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    selected_images = payload.get("selected_images")
+    if isinstance(selected_images, dict):
+        front = selected_images.get("front")
+        if isinstance(front, dict):
+            display = front.get("display")
+            if isinstance(display, dict):
+                for value in display.values():
+                    if isinstance(value, str) and value:
+                        return value
+    return None
+
+
+def _fetch_image_blob(image_url: str | None) -> tuple[bytes | None, str | None]:
+    if not image_url or not re.match(r"^https?://", image_url, flags=re.I):
+        return (None, None)
+    try:
+        timeout = httpx.Timeout(connect=1.5, read=3.0, write=3.0, pool=1.5)
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            response = client.get(image_url)
+            response.raise_for_status()
+            content_type = (response.headers.get("content-type") or "").split(";", 1)[0].strip()
+            if not content_type.startswith("image/"):
+                return (None, None)
+            return (response.content, content_type)
+    except Exception:
+        return (None, None)
 
 
 def _apply_aliases(session: Session, food: Food, aliases: list[str]) -> None:
@@ -27,12 +72,21 @@ def _apply_aliases(session: Session, food: Food, aliases: list[str]) -> None:
 
 def create_food(session: Session, payload: FoodCreate) -> Food:
     food_group_key = str(uuid4()) if payload.source == "custom" else None
+    source_image_url = payload.image_url or _source_payload_image_url(payload.raw_source_payload)
+    image_data = payload.image_data
+    image_content_type = payload.image_content_type
+    if image_data is None:
+        image_data, image_content_type = _fetch_image_blob(source_image_url)
     food = Food(
         canonical_name=payload.canonical_name.strip(),
         normalized_name=normalize_text(payload.canonical_name),
         brand=payload.brand,
         source=payload.source,
         source_food_id=payload.source_food_id,
+        image_url=source_image_url,
+        image_content_type=image_content_type,
+        image_data=image_data,
+        icon_key=payload.icon_key,
         serving_description=payload.serving_description,
         grams_per_serving=payload.grams_per_serving,
         calories=payload.calories,
@@ -83,12 +137,21 @@ def update_food(session: Session, food_id: int, payload: FoodUpdate) -> Food:
         raise ValueError("Only custom foods can be updated in place via versioning")
 
     existing.is_current = False
+    source_image_url = payload.image_url or existing.image_url or _source_payload_image_url(existing.raw_source_payload)
+    image_data = payload.image_data
+    image_content_type = payload.image_content_type
+    if image_data is None and source_image_url != existing.image_url:
+        image_data, image_content_type = _fetch_image_blob(source_image_url)
     next_food = Food(
         canonical_name=payload.canonical_name.strip(),
         normalized_name=normalize_text(payload.canonical_name),
         brand=payload.brand,
         source="custom",
         source_food_id=existing.source_food_id,
+        image_url=source_image_url,
+        image_content_type=image_content_type or existing.image_content_type,
+        image_data=image_data or existing.image_data,
+        icon_key=payload.icon_key,
         serving_description=payload.serving_description,
         grams_per_serving=payload.grams_per_serving,
         calories=payload.calories,
@@ -125,6 +188,10 @@ def duplicate_food_to_custom(session: Session, food_id: int) -> Food:
     payload = FoodCreate(
         canonical_name=original.canonical_name,
         brand=original.brand,
+        image_url=original.image_url or _source_payload_image_url(original.raw_source_payload),
+        image_data=original.image_data,
+        image_content_type=original.image_content_type,
+        icon_key=original.icon_key,
         serving_description=original.serving_description,
         grams_per_serving=original.grams_per_serving,
         calories=original.calories,
@@ -138,6 +205,18 @@ def duplicate_food_to_custom(session: Session, food_id: int) -> Food:
         authoritative_locked=False,
     )
     return create_food(session, payload)
+
+
+def remove_custom_food_from_library(session: Session, food_id: int) -> Food:
+    food = get_food(session, food_id)
+    if not food:
+        raise ValueError("Food not found")
+    if food.source != "custom":
+        raise ValueError("Only custom foods can be removed from the custom library")
+    food.is_current = False
+    session.commit()
+    session.refresh(food)
+    return food
 
 
 def search_foods(session: Session, query: str | None = None, source: str | None = None) -> list[Food]:
@@ -179,28 +258,56 @@ def get_picker_foods(session: Session, query: str | None = None, source: str | N
     return [_picker_card(session, food, recent_map.get(food.id)) for food in ordered_foods]
 
 
-def get_food_library_cards(session: Session, query: str | None = None, source: str | None = None) -> list[dict]:
+def get_food_library_cards(
+    session: Session,
+    query: str | None = None,
+    source: str | None = None,
+    sort_by: str = "previously_logged",
+) -> list[dict]:
     foods = search_foods(session, query, source)
     log_stats = _food_log_stats_map(session)
     cards: list[dict] = []
     for food in foods:
         stats = log_stats.get(food.id, {"log_count": 0, "last_logged_at": None})
+        activity_at = max(
+            timestamp
+            for timestamp in [stats["last_logged_at"], food.updated_at, food.created_at]
+            if timestamp is not None
+        )
         cards.append(
             {
                 "food": food_to_read(session, food),
                 "log_count": int(stats["log_count"]),
                 "last_logged_at": stats["last_logged_at"],
+                "activity_at": activity_at,
             }
         )
 
-    cards.sort(
-        key=lambda card: (
-            0 if card["log_count"] > 0 else 1,
-            -card["log_count"],
-            -(card["last_logged_at"].timestamp() if card["last_logged_at"] else 0),
-            card["food"].canonical_name.lower(),
+    if sort_by == "frequently_logged":
+        cards.sort(
+            key=lambda card: (
+                -card["log_count"],
+                -(card["last_logged_at"].timestamp() if card["last_logged_at"] else 0),
+                card["food"].canonical_name.lower(),
+            )
         )
-    )
+    elif sort_by == "frequent_breakfast":
+        cards.sort(
+            key=lambda card: (
+                -(card["last_logged_at"].timestamp() if card["last_logged_at"] else 0),
+                -card["log_count"],
+                card["food"].canonical_name.lower(),
+            )
+        )
+    else:
+        cards.sort(
+            key=lambda card: (
+                -(card["last_logged_at"].timestamp() if card["last_logged_at"] else 0),
+                -(card["activity_at"].timestamp() if card["activity_at"] else 0),
+                -card["log_count"],
+                card["food"].canonical_name.lower(),
+            )
+        )
     return cards
 
 
@@ -241,45 +348,69 @@ def _food_log_stats_map(session: Session) -> dict[int, dict]:
 
 def _picker_card(session: Session, food: Food, recent_entry: tuple[MealEntryItem, object] | None) -> dict:
     food_read = food_to_read(session, food)
+    native_unit = _native_serving_unit(food.serving_description)
     if recent_entry:
         meal_item, logged_at = recent_entry
         quick_quantity = meal_item.quantity
-        quick_unit = meal_item.unit
+        quick_unit = meal_item.unit or native_unit
         quick_label = f"{meal_item.quantity:g} {meal_item.unit}".strip() if meal_item.unit else f"{meal_item.quantity:g} {food.serving_description}"
         last_logged_at = logged_at
     else:
         quick_quantity = 1.0
-        quick_unit = None
+        quick_unit = native_unit
         quick_label = f"1 {food.serving_description}"
         last_logged_at = None
+    unit_options = _picker_unit_options(native_unit, quick_unit)
     return {
         "food": food_read,
         "quick_quantity": quick_quantity,
         "quick_unit": quick_unit,
         "quick_label": quick_label,
         "last_logged_at": last_logged_at,
+        "native_unit": native_unit,
+        "unit_options": unit_options,
     }
 
 
-def _food_image_url(food: Food) -> str | None:
-    payload = food.raw_source_payload or {}
-    if not isinstance(payload, dict):
+def _native_serving_unit(serving_description: str | None) -> str | None:
+    if not serving_description:
         return None
-    direct_keys = ["image_url", "image_front_url", "image_small_url"]
-    for key in direct_keys:
-        value = payload.get(key)
-        if isinstance(value, str) and value:
-            return value
-    selected_images = payload.get("selected_images")
-    if isinstance(selected_images, dict):
-        front = selected_images.get("front")
-        if isinstance(front, dict):
-            display = front.get("display")
-            if isinstance(display, dict):
-                for value in display.values():
-                    if isinstance(value, str) and value:
-                        return value
-    return None
+    text = serving_description.strip().lower()
+    match = re.match(r"^(?:\d+(?:\.\d+)?(?:/\d+(?:\.\d+)?)?\s+)?([a-z]+(?:\s+[a-z]+)?)", text)
+    if not match:
+        return None
+    native = match.group(1).strip()
+    if native in {"x", "of"}:
+        return None
+    return native
+
+
+def _picker_unit_options(native_unit: str | None, recent_unit: str | None) -> list[dict[str, str]]:
+    options: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def add(value: str | None, label: str | None = None) -> None:
+        if not value:
+            return
+        cleaned = value.strip().lower()
+        if not cleaned or cleaned in seen:
+            return
+        seen.add(cleaned)
+        options.append({"value": cleaned, "label": label or cleaned})
+
+    add(recent_unit)
+    add(native_unit)
+    for value, label in GRAM_UNIT_OPTIONS:
+        add(value, label)
+    return options
+
+
+def _food_image_url(food: Food) -> str | None:
+    if food.image_data:
+        return f"/foods/{food.id}/image"
+    if food.image_url:
+        return food.image_url
+    return _source_payload_image_url(food.raw_source_payload)
 
 
 def food_to_read(session: Session, food: Food) -> FoodRead:
@@ -291,6 +422,9 @@ def food_to_read(session: Session, food: Food) -> FoodRead:
         source=food.source,
         source_food_id=food.source_food_id,
         image_url=_food_image_url(food),
+        image_source_url=food.image_url or _source_payload_image_url(food.raw_source_payload),
+        icon_key=food.icon_key,
+        icon_symbol=food_icon_symbol(food.icon_key),
         serving_description=food.serving_description,
         grams_per_serving=food.grams_per_serving,
         calories=food.calories,

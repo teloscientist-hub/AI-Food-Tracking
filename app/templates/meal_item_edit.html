@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+{% set page_title = "Edit Logged Item" %}
+{% set page_kicker = "Meal item" %}
+{% set nav_active = "daily" %}
+{% set page_date = meal_entry.logged_at.date().isoformat() %}
+{% include "_page_topbar.html" %}
+<section class="hero">
+  <div>
+    <p class="subtle">{{ item.resolved_food_name or item.parsed_phrase }}</p>
+  </div>
+  <a class="button outline" href="{{ redirect_to }}">Back</a>
+</section>
+
+<section class="grid two-up">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Current item</h3>
+      <span class="mini-link">{{ meal_entry.meal_label }}</span>
+    </div>
+    <div class="facts-meta">
+      <div><span>Name</span><strong>{{ item.resolved_food_name or item.parsed_phrase }}</strong></div>
+      <div><span>Current amount</span><strong>{{ item.quantity }} {{ item.unit or item.serving_description_snapshot or "" }}</strong></div>
+      <div><span>Logged at</span><strong>{{ meal_entry.logged_at }}</strong></div>
+      <div><span>Calories</span><strong>{{ item.calories_snapshot }}</strong></div>
+    </div>
+    <div class="facts-table">
+      <div class="facts-head"><span>Nutrient</span><span>Value</span></div>
+      <div class="facts-row coral"><span>Net Carbs</span><strong>{{ item.net_carbs_g_snapshot if item.net_carbs_g_snapshot is not none else item.carbs_g_snapshot }}g</strong></div>
+      <div class="facts-row blue"><span>Protein</span><strong>{{ item.protein_g_snapshot }}g</strong></div>
+      <div class="facts-row gold"><span>Fat</span><strong>{{ item.fat_g_snapshot }}g</strong></div>
+      <div class="facts-row neutral"><span>Calories</span><strong>{{ item.calories_snapshot }}</strong></div>
+    </div>
+  </article>
+  <article class="panel">
+    <form action="/meal-items/{{ item.id }}/save" method="post" class="stack">
+      <input type="hidden" name="redirect_to" value="{{ redirect_to }}">
+      <div class="form-grid">
+        <label>
+          <span>Quantity</span>
+          <input type="number" name="quantity" step="0.001" min="0.001" value="{{ item.quantity }}" required>
+        </label>
+        <label>
+          <span>Units</span>
+          <select name="unit">
+            {% for option in unit_options %}
+            <option value="{{ option.value }}" {% if (item.unit or '')|lower == option.value %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <label>
+        <span>Meal label</span>
+        <select name="meal_label">
+          {% for option in meal_options %}
+          <option value="{{ option }}" {% if meal_entry.meal_label == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Logged at</span>
+        <input type="datetime-local" name="logged_at" value="{{ meal_entry.logged_at.isoformat(timespec='minutes') }}">
+      </label>
+      <button class="button primary" type="submit">Save item changes</button>
+    </form>
+  </article>
+</section>
+{% endblock %}

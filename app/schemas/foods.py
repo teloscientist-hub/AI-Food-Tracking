@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class FoodBase(BaseModel):
     canonical_name: str
     brand: str | None = None
+    image_url: str | None = None
     serving_description: str = "1 serving"
     grams_per_serving: float = 1.0
     calories: float = 0.0
@@ -20,6 +21,9 @@ class FoodBase(BaseModel):
 
 
 class FoodCreate(FoodBase):
+    image_data: bytes | None = None
+    image_content_type: str | None = None
+    icon_key: str | None = None
     notes: str | None = None
     authoritative_locked: bool = False
     source: str = "custom"
@@ -28,6 +32,9 @@ class FoodCreate(FoodBase):
 
 
 class FoodUpdate(FoodBase):
+    image_data: bytes | None = None
+    image_content_type: str | None = None
+    icon_key: str | None = None
     notes: str | None = None
     authoritative_locked: bool = False
 
@@ -36,7 +43,9 @@ class FoodRead(FoodBase):
     id: int
     source: str
     source_food_id: str | None = None
-    image_url: str | None = None
+    image_source_url: str | None = None
+    icon_key: str | None = None
+    icon_symbol: str | None = None
     version: int
     is_current: bool
     food_group_key: str | None = None

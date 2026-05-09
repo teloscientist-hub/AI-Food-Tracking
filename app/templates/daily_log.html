@@ -1,50 +1,118 @@
 {% extends "base.html" %}
 {% block content %}
+{% set page_title = "Daily Log" %}
+{% set page_kicker = "Daily detail" %}
+{% set nav_active = "daily" %}
+{% set page_date = target_date %}
+{% include "_page_topbar.html" %}
 <section class="hero">
   <div>
-    <p class="eyebrow">Daily detail</p>
-    <h2>{{ target_date }}</h2>
     <p class="subtle">Consumed {{ daily.calories.consumed }} calories, {{ daily.protein.consumed }}g protein, {{ daily.carbs.consumed }}g carbs, {{ daily.fat.consumed }}g fat.</p>
   </div>
   <a class="button outline" href="/log">Add food</a>
 </section>
 {% for group in meal_groups %}
-<section class="panel meal-card">
+<section class="panel meal-card" data-meal-label="{{ group.label }}" data-target-date="{{ target_date }}">
   <div class="panel-header meal-card-header">
     <h3>{{ group.label }}</h3>
-    <span class="mini-link">{{ group.entries|length }} entr{{ "y" if group.entries|length == 1 else "ies" }}</span>
+    <div class="row-overflow-menu meal-overflow-menu">
+      <button class="row-overflow-trigger meal-overflow-trigger" type="button" aria-label="Meal actions">&#8942;</button>
+      <div class="row-overflow-panel meal-overflow-panel">
+        <button class="overflow-action copy meal-copy-open" type="button" data-source-date="{{ target_date }}" data-source-meal="{{ group.label }}" data-default-target-meal="{{ group.label }}" data-redirect-to="{{ daily_return }}">Copy To...</button>
+          <button class="overflow-action edit meal-move-toggle" type="button">Move</button>
+        <form action="/meals/clear" method="post">
+          <input type="hidden" name="source_date" value="{{ target_date }}">
+          <input type="hidden" name="source_meal_label" value="{{ group.label }}">
+          <input type="hidden" name="redirect_to" value="{{ daily_return }}">
+          <button class="overflow-action remove" type="submit">Remove All</button>
+        </form>
+      </div>
+    </div>
   </div>
   {% for entry in group.entries %}
     {% for item in entry.items %}
     <div class="meal-row">
+      <button class="meal-drag-handle" type="button" draggable="true" data-item-id="{{ item.id }}" aria-label="Move item">⋮⋮</button>
+      <div class="picker-thumb meal-thumb">
+        {% if item.food and item.food.image_url %}
+        <img src="{{ item.food.image_url }}" alt="{{ item.resolved_food_name or item.parsed_phrase }}">
+        {% elif item.food and item.food.icon_key %}
+        <span class="food-icon-symbol">{{ food_icon_symbol(item.food.icon_key) }}</span>
+        {% else %}
+        <span>{{ (item.resolved_food_name or item.parsed_phrase)[:1] }}</span>
+        {% endif %}
+      </div>
       <div class="meal-item-main">
-        <strong>{{ item.resolved_food_name }}</strong>
+        {% if item.food_id %}
+        <strong><a href="/foods/{{ item.food_id }}">{{ item.resolved_food_name or item.parsed_phrase }}</a></strong>
+        {% else %}
+        <strong>{{ item.resolved_food_name or item.parsed_phrase }}</strong>
+        {% endif %}
         <span>{{ item.quantity }} {{ item.unit or item.serving_description_snapshot or "" }}</span>
       </div>
       <div class="meal-item-macros">
-        <span class="coral-text">{{ item.net_carbs_g_snapshot if item.net_carbs_g_snapshot is not none else item.carbs_g_snapshot }}g</span>
-        <span class="blue-text">{{ item.protein_g_snapshot }}g</span>
-        <span class="gold-text">{{ item.fat_g_snapshot }}g</span>
-        <strong>{{ item.calories_snapshot }}</strong>
+        <div class="picker-macro-cell">
+          <small>Net Carbs</small>
+          <span class="coral-text">{{ item.net_carbs_g_snapshot if item.net_carbs_g_snapshot is not none else item.carbs_g_snapshot }}g</span>
+        </div>
+        <div class="picker-macro-cell">
+          <small>Protein</small>
+          <span class="blue-text">{{ item.protein_g_snapshot }}g</span>
+        </div>
+        <div class="picker-macro-cell">
+          <small>Fat</small>
+          <span class="gold-text">{{ item.fat_g_snapshot }}g</span>
+        </div>
+        <div class="picker-macro-cell">
+          <small>Cals</small>
+          <strong>{{ item.calories_snapshot }}</strong>
+        </div>
       </div>
+      <details class="row-overflow-menu">
+        <summary class="row-overflow-trigger" aria-label="Item actions">&#8942;</summary>
+        <div class="row-overflow-panel">
+          <a class="overflow-action edit" href="/meal-items/{{ item.id }}/edit?redirect_to=/daily/{{ target_date }}">Edit</a>
+          <form action="/meal-items/{{ item.id }}/copy" method="post">
+            <input type="hidden" name="redirect_to" value="/daily/{{ target_date }}">
+            <button class="overflow-action copy" type="submit">Copy</button>
+          </form>
+          <form action="/meal-items/{{ item.id }}/delete" method="post">
+            <input type="hidden" name="redirect_to" value="/daily/{{ target_date }}">
+            <button class="overflow-action remove" type="submit">Remove</button>
+          </form>
+        </div>
+      </details>
     </div>
     {% endfor %}
   {% endfor %}
   <div class="meal-total">
     <div><strong>{{ group.label }} Total</strong></div>
     <div class="meal-item-macros">
-      <span class="coral-text">{{ "%.0f"|format(group.totals.net_carbs) }}g</span>
-      <span class="blue-text">{{ "%.0f"|format(group.totals.protein) }}g</span>
-      <span class="gold-text">{{ "%.0f"|format(group.totals.fat) }}g</span>
-      <strong>{{ "%.0f"|format(group.totals.calories) }}</strong>
+      <div class="picker-macro-cell">
+        <small>Net Carbs</small>
+        <span class="coral-text">{{ "%.0f"|format(group.totals.net_carbs) }}g</span>
+      </div>
+      <div class="picker-macro-cell">
+        <small>Protein</small>
+        <span class="blue-text">{{ "%.0f"|format(group.totals.protein) }}g</span>
+      </div>
+      <div class="picker-macro-cell">
+        <small>Fat</small>
+        <span class="gold-text">{{ "%.0f"|format(group.totals.fat) }}g</span>
+      </div>
+      <div class="picker-macro-cell">
+        <small>Cals</small>
+        <strong>{{ "%.0f"|format(group.totals.calories) }}</strong>
+      </div>
     </div>
   </div>
   <div class="meal-actions">
-    <a href="/log" class="mini-link">Advanced</a>
-    <a href="/log" class="mini-link">Add {{ group.label }}</a>
+    <a href="/log?meal_label={{ group.label }}&logged_at={{ target_date }}T12:00" class="mini-link">Advanced</a>
+    <a href="/log?meal_label={{ group.label }}&logged_at={{ target_date }}T12:00" class="mini-link">Add {{ group.label }}</a>
   </div>
 </section>
-{% else %}
-<section class="panel"><p>No entries for this day.</p></section>
 {% endfor %}
+{% set copy_modal_date = target_date %}
+{% set copy_modal_redirect = daily_return %}
+{% include "_meal_action_modal.html" %}
 {% endblock %}

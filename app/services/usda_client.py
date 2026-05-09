@@ -9,6 +9,24 @@ from app.config import get_settings
 from app.services.parser import normalize_text
 
 
+def _serving_info(item: dict) -> tuple[str, float]:
+    serving_size = item.get("servingSize")
+    serving_unit = item.get("servingSizeUnit")
+    if serving_size:
+        grams = float(serving_size)
+        label = str(serving_unit or "g")
+        return (label, grams)
+
+    measures = sorted(item.get("foodMeasures") or [], key=lambda measure: measure.get("rank") or 9999)
+    for measure in measures:
+        grams = measure.get("gramWeight")
+        label = measure.get("disseminationText") or measure.get("modifier")
+        if grams and label:
+            return (str(label), float(grams))
+
+    return ("100 g", 100.0)
+
+
 @dataclass(slots=True)
 class ExternalFoodCandidate:
     canonical_name: str
@@ -69,6 +87,7 @@ class USDAClient:
             nutrients = {n.get("nutrientName"): n.get("value") for n in item.get("foodNutrients", [])}
             name = item.get("description") or "USDA Food"
             brand = item.get("brandOwner")
+            serving_description, grams_per_serving = _serving_info(item)
             normalized_name = normalize_text(name)
             normalized_brand = normalize_text(brand or "")
             score = 0.45 + (SequenceMatcher(None, normalized_phrase, normalized_name).ratio() * 0.35)
@@ -92,8 +111,8 @@ class USDAClient:
                     brand=brand,
                     source="usda",
                     source_food_id=str(item.get("fdcId")),
-                    serving_description=item.get("servingSizeUnit") or "1 serving",
-                    grams_per_serving=float(item.get("servingSize") or 100.0),
+                    serving_description=serving_description,
+                    grams_per_serving=grams_per_serving,
                     calories=float(nutrients.get("Energy") or 0.0),
                     protein_g=float(nutrients.get("Protein") or 0.0),
                     carbs_g=float(nutrients.get("Carbohydrate, by difference") or 0.0),

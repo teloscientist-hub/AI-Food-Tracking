@@ -1,0 +1,59 @@
+<section class="page-topbar">
+  <div class="page-topbar-title">
+    <div class="page-title-lockup">
+      <img class="app-mark" src="{{ url_for('static', path='app-icon.svg') }}" alt="MML Food Tracking icon">
+      <div>
+        {% if page_kicker %}
+        <p class="eyebrow">{{ page_kicker }}</p>
+        {% endif %}
+        <h2>{{ page_title }}</h2>
+      </div>
+    </div>
+  </div>
+  <div class="page-topbar-right">
+    <nav class="top-nav">
+      <a class="top-nav-link {% if nav_active == 'dashboard' %}active{% endif %}" href="/">Dashboard</a>
+      <a class="top-nav-link {% if nav_active == 'foods' %}active{% endif %}" href="/foods">Foods Library</a>
+      <a class="top-nav-link {% if nav_active == 'daily' %}active{% endif %}" href="/daily/{{ page_date or today_iso() }}">Daily Log</a>
+      <a class="top-nav-link {% if nav_active == 'weekly' %}active{% endif %}" href="/weekly">Weekly Trends</a>
+      <a class="top-nav-link {% if nav_active == 'settings' %}active{% endif %}" href="/settings">Settings</a>
+    </nav>
+    <div class="dashboard-date-pill">
+      {% if prev_href %}
+      <a href="{{ prev_href }}">&lsaquo;</a>
+      {% endif %}
+      {% if date_form_action %}
+      <form method="get" action="{{ date_form_action }}" class="dashboard-date-form">
+        {% if date_hidden_metric %}
+        <input type="hidden" name="metric" value="{{ date_hidden_metric }}">
+        {% endif %}
+        {% if date_hidden_params %}
+        {% for key, value in date_hidden_params.items() %}
+        <input type="hidden" name="{{ key }}" value="{{ value }}">
+        {% endfor %}
+        {% endif %}
+        <button
+          type="button"
+          class="dashboard-date-button"
+          onclick="const input=this.nextElementSibling; if (input && typeof input.showPicker === 'function') { input.showPicker(); } else if (input) { input.focus(); input.click(); }"
+        >
+          <strong>{% if page_date == today_iso() %}Today{% else %}{{ page_date }}{% endif %}</strong>
+        </button>
+        <input
+          type="date"
+          name="target_date"
+          value="{{ selected_date or page_date }}"
+          class="dashboard-date-input"
+          onchange="this.form.submit()"
+          aria-label="Choose date"
+        >
+      </form>
+      {% else %}
+      <strong>{% if (page_date or today_iso()) == today_iso() %}Today{% else %}{{ page_date or today_iso() }}{% endif %}</strong>
+      {% endif %}
+      {% if next_href %}
+      <a href="{{ next_href }}">&rsaquo;</a>
+      {% endif %}
+    </div>
+  </div>
+</section>

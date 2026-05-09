@@ -10,6 +10,10 @@ def test_parse_selected_food_value_accepts_prefixed_values() -> None:
     assert _parse_selected_food_value("external:3") == ("external", 3)
 
 
+def test_parse_selected_food_value_accepts_exclude() -> None:
+    assert _parse_selected_food_value("exclude") == ("exclude", None)
+
+
 def test_parse_selected_food_value_degrades_unknown_values_to_unresolved() -> None:
     assert _parse_selected_food_value("") == ("unresolved", None)
     assert _parse_selected_food_value("unresolved") == ("unresolved", None)

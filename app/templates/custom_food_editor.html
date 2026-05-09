@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
+{% set page_title = "Custom Food Editor" %}
+{% set page_kicker = "First-class custom foods" %}
+{% set nav_active = "foods" %}
+{% set page_date = today_iso() %}
+{% include "_page_topbar.html" %}
 <section class="hero">
   <div>
-    <p class="eyebrow">First-class custom foods</p>
     <h2>{% if mode == "edit" %}Edit custom food{% else %}Create custom food{% endif %}</h2>
     <p class="subtle">Edits create a new version so historical logs stay unchanged, while aliases and lock state keep your resolution behavior stable.</p>
   </div>
@@ -16,10 +20,18 @@
       <h3>{% if mode == "edit" %}Current nutrition{% else %}Preview{% endif %}</h3>
       <span class="mini-link">{% if food and food.authoritative_locked %}locked{% else %}editable{% endif %}</span>
     </div>
+    <div class="editor-image-preview">
+      {% if food and food.image_url %}
+      <img src="{{ food.image_url }}" alt="{{ food.canonical_name }}">
+      {% elif food and food.icon_symbol %}
+      <span class="food-icon-symbol">{{ food.icon_symbol }}</span>
+      {% else %}
+      <span>{{ (food.canonical_name if food else prefill_phrase or "F")[:1] }}</span>
+      {% endif %}
+    </div>
     <div class="facts-meta">
       <div><span>Name</span><strong>{{ food.canonical_name if food else prefill_phrase or "New custom food" }}</strong></div>
       <div><span>Serving Size</span><strong>{{ food.serving_description if food else "1 serving" }}</strong></div>
-      <div><span>Serving Weight</span><strong>{{ food.grams_per_serving if food else 100 }}g</strong></div>
       <div><span>Aliases</span><strong>{{ food.aliases|join(", ") if food and food.aliases else "None yet" }}</strong></div>
     </div>
     <div class="facts-table">
@@ -33,12 +45,35 @@
     </div>
   </article>
   <article class="panel">
-    <form action="{% if mode == 'edit' %}/foods/{{ food.id }}/save{% else %}/foods/custom/save{% endif %}" method="post" class="stack">
+    <form action="{% if mode == 'edit' %}/foods/{{ food.id }}/save{% else %}/foods/custom/save{% endif %}" method="post" enctype="multipart/form-data" class="stack">
       <div class="form-grid">
         <label><span>Name</span><input type="text" name="canonical_name" value="{{ food.canonical_name if food else prefill_phrase }}" required></label>
         <label><span>Brand</span><input type="text" name="brand" value="{{ food.brand if food else '' }}"></label>
-        <label><span>Serving description</span><input type="text" name="serving_description" value="{{ food.serving_description if food else '1 serving' }}" required></label>
-        <label><span>Grams per serving</span><input type="number" step="0.01" name="grams_per_serving" value="{{ food.grams_per_serving if food else 100 }}" required></label>
+        <label class="form-span-2"><span>Square image URL</span><input type="text" name="image_url" value="{{ food.image_source_url if food and food.image_source_url else '' }}" placeholder="https://example.com/food-image.png"></label>
+        <label class="form-span-2 media-upload-field">
+          <span>Upload image</span>
+          <div class="media-upload-row">
+            <label class="button secondary file-button">
+              {% if food and food.image_url %}Update image{% else %}Add image{% endif %}
+              <input type="file" name="image_upload" accept="image/*" hidden>
+            </label>
+            <span class="subtle">Upload a square image, or use a URL above.</span>
+          </div>
+        </label>
+        <fieldset class="form-span-2 icon-picker-field">
+          <legend>Food icon</legend>
+          <div class="icon-picker-grid">
+            {% for icon in icon_library %}
+            <label class="icon-option {% if food and food.icon_key == icon.key %}active{% endif %}">
+              <input type="radio" name="icon_key" value="{{ icon.key }}" {% if food and food.icon_key == icon.key %}checked{% endif %}>
+              <span class="icon-option-symbol">{{ icon.symbol }}</span>
+              <span class="icon-option-label">{{ icon.label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+        <label><span>Quantity and type</span><input type="text" name="serving_description" value="{{ food.serving_description if food else '1 serving' }}" placeholder="1 bar, 1 serving, 1 cup" required></label>
+        <input type="hidden" name="grams_per_serving" value="{{ food.grams_per_serving if food else 1 }}">
         <label><span>Calories</span><input type="number" step="0.01" name="calories" value="{{ food.calories if food else 0 }}" required></label>
         <label><span>Protein</span><input type="number" step="0.01" name="protein_g" value="{{ food.protein_g if food else 0 }}" required></label>
         <label><span>Carbs</span><input type="number" step="0.01" name="carbs_g" value="{{ food.carbs_g if food else 0 }}" required></label>
@@ -52,7 +87,14 @@
         <input type="checkbox" name="authoritative_locked" value="true" {% if food and food.authoritative_locked %}checked{% endif %}>
         <span>Lock as authoritative</span>
       </label>
-      <button class="button primary" type="submit">{% if mode == "edit" %}Save new version{% else %}Create custom food{% endif %}</button>
+      <div class="editor-actions">
+        <button class="button primary" type="submit">{% if mode == "edit" %}Save new version{% else %}Create custom food{% endif %}</button>
+        {% if mode == "edit" and food %}
+        <form action="/foods/{{ food.id }}/remove" method="post" class="editor-delete-form">
+          <button class="button danger" type="submit">Delete food</button>
+        </form>
+        {% endif %}
+      </div>
     </form>
   </article>
 </section>

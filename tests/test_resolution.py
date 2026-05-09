@@ -1,7 +1,7 @@
 from app.schemas.foods import FoodCreate
 from app.services.food_service import create_food
 from app.services.parser import parse_food_phrase
-from app.services.resolution import FoodResolver, build_search_phrases, looks_branded, prepare_search_phrase, strongly_branded
+from app.services.resolution import FoodResolver, build_search_phrases, is_simple_whole_food_query, looks_branded, prepare_search_phrase, strongly_branded
 from app.services.usda_client import ExternalFoodCandidate
 
 
@@ -119,6 +119,7 @@ def test_branded_phrase_detection_requires_real_brand_signal() -> None:
     assert strongly_branded("Kirkland shredded cheddar") is True
     assert looks_branded("Pure Protein Cafe Latte") is True
     assert strongly_branded("Premier Protein Cafe Latte") is True
+    assert is_simple_whole_food_query("avocado") is True
     assert looks_branded("five eggs") is False
 
 
@@ -292,6 +293,55 @@ def test_resolution_prefers_openfoodfacts_before_usda_branded_for_brand_query(se
     assert result.candidates[1].strategy.startswith("usda_branded")
 
 
+def test_resolution_prefers_generic_whole_food_over_branded_product_for_simple_query(session) -> None:
+    class SplitClient:
+        def search(self, phrase: str, limit: int = 5):
+            return [
+                ExternalFoodCandidate(
+                    canonical_name="Evolution Fresh, Organic Avocado Greens, Avacado, Avacado",
+                    brand="Evolution Fresh",
+                    source="usda",
+                    source_food_id="901",
+                    serving_description="1 bottle",
+                    grams_per_serving=325,
+                    calories=46,
+                    protein_g=1.25,
+                    carbs_g=6.67,
+                    fat_g=1.67,
+                    fiber_g=None,
+                    net_carbs_g=None,
+                    raw_source_payload={},
+                    score=0.88,
+                ),
+                ExternalFoodCandidate(
+                    canonical_name="Avocados, Raw, All Commercial Varieties",
+                    brand=None,
+                    source="usda",
+                    source_food_id="902",
+                    serving_description="1 avocado",
+                    grams_per_serving=150,
+                    calories=240,
+                    protein_g=3,
+                    carbs_g=12.8,
+                    fat_g=22,
+                    fiber_g=10,
+                    net_carbs_g=2.8,
+                    raw_source_payload={},
+                    score=0.82,
+                ),
+            ]
+
+        def search_branded(self, phrase: str, limit: int = 5):
+            return []
+
+    resolver = FoodResolver(usda_client=SplitClient(), off_client=FakeClient([]))
+
+    result = resolver.resolve(session, parse_food_phrase("1 avocado"))
+
+    assert result.candidates[0].canonical_name == "Avocados, Raw, All Commercial Varieties"
+    assert result.candidates[0].source == "usda"
+
+
 def test_resolution_skips_generic_usda_when_branded_sources_are_strong(session) -> None:
     class SplitClient:
         def search(self, phrase: str, limit: int = 5):
@@ -390,3 +440,92 @@ def test_resolution_queries_openfoodfacts_before_usda_for_brand_query(session) -
 
     assert call_order
     assert call_order[0][0] == "openfoodfacts"
+
+
+def test_resolution_prefers_brand_plus_name_custom_match(session) -> None:
+    create_food(
+        session,
+        FoodCreate(
+            canonical_name="Buffalo Style Crispy Protein Chips",
+            brand="Wilde",
+            serving_description="20 chips",
+            grams_per_serving=1,
+            calories=43,
+            protein_g=3,
+            carbs_g=2,
+            fat_g=3,
+            aliases=[],
+        ),
+    )
+
+    resolver = FoodResolver(
+        usda_client=FakeClient(
+            [
+                ExternalFoodCandidate(
+                    canonical_name="Protein Chips",
+                    brand=None,
+                    source="usda",
+                    source_food_id="usda-1",
+                    serving_description="1 serving",
+                    grams_per_serving=28,
+                    calories=140,
+                    protein_g=10,
+                    carbs_g=12,
+                    fat_g=3,
+                    fiber_g=None,
+                    net_carbs_g=None,
+                    raw_source_payload={},
+                    score=0.76,
+                )
+            ]
+        ),
+        off_client=FakeClient(
+            [
+                ExternalFoodCandidate(
+                    canonical_name="Protein Chips Buffalo Style",
+                    brand="Wilde",
+                    source="openfoodfacts",
+                    source_food_id="off-1",
+                    serving_description="20 chips",
+                    grams_per_serving=28,
+                    calories=43,
+                    protein_g=3,
+                    carbs_g=2,
+                    fat_g=3,
+                    fiber_g=None,
+                    net_carbs_g=2,
+                    raw_source_payload={},
+                    score=0.8,
+                )
+            ]
+        ),
+    )
+
+    result = resolver.resolve(session, parse_food_phrase("1 wilde protein chips"))
+
+    assert result.candidates[0].source == "custom"
+    assert "Wilde" in (result.candidates[0].brand or "")
+
+
+def test_resolution_prefers_custom_for_wilde_brand_phrase(session) -> None:
+    create_food(
+        session,
+        FoodCreate(
+            canonical_name="Wilde Protein Chips Korean Sweet and Spicy",
+            brand="Wilde",
+            serving_description="25 pieces",
+            grams_per_serving=1,
+            calories=150,
+            protein_g=16,
+            carbs_g=15,
+            fat_g=3,
+            aliases=[],
+        ),
+    )
+
+    resolver = FoodResolver(usda_client=FakeClient([]), off_client=FakeClient([]))
+    result = resolver.resolve(session, parse_food_phrase("Wilde Protein Chips 50 count"))
+
+    assert result.candidates
+    assert result.candidates[0].source == "custom"
+    assert result.candidates[0].brand == "Wilde"

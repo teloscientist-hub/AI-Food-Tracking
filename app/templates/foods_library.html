@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
+{% set page_title = "Foods Library" %}
+{% set page_kicker = "All foods" %}
+{% set nav_active = "foods" %}
+{% set page_date = today_iso() %}
+{% include "_page_topbar.html" %}
 <section class="hero">
   <div>
-    <p class="eyebrow">All foods</p>
-    <h2>Foods Library</h2>
     <p class="subtle">Search custom and external foods, manage aliases, and duplicate external foods into your custom catalog.</p>
   </div>
   <a class="button primary" href="/foods/custom/new">Create custom food</a>
@@ -11,34 +14,130 @@
 <section class="panel">
   <form method="get" class="picker-toolbar">
     <input type="text" name="q" value="{{ q }}" placeholder="Search foods and servings...">
+    <input type="hidden" name="sort" value="{{ sort }}">
     <div class="toggle-row">
-      {% for option in ["all","custom","usda","openfoodfacts"] %}
+      {% for option in ["custom","usda","openfoodfacts"] %}
       <button class="chip {% if source == option %}active{% endif %}" type="submit" name="source" value="{{ option }}">{{ option }}</button>
       {% endfor %}
     </div>
+    {% if source == "custom" %}
+    <div class="quick-chips left">
+      <button class="chip {% if sort == 'frequent_breakfast' %}active{% endif %}" type="submit" name="sort" value="frequent_breakfast">Frequent for Breakfast</button>
+      <button class="chip {% if sort == 'frequently_logged' %}active{% endif %}" type="submit" name="sort" value="frequently_logged">Frequently Logged</button>
+      <button class="chip {% if sort == 'previously_logged' %}active{% endif %}" type="submit" name="sort" value="previously_logged">Previously Logged</button>
+    </div>
+    {% endif %}
   </form>
-  <div class="quick-chips left">
-    {% for chip in ["Frequent for Breakfast", "Frequently Logged", "Previously Logged"] %}
-    <span class="chip {% if chip == 'Previously Logged' %}active{% endif %}">{{ chip }}</span>
-    {% endfor %}
+  {% if external_error %}
+  <div class="save-banner picker-inline-banner">
+    <strong>Search unavailable</strong>
+    <span>{{ external_error }}</span>
   </div>
+  {% endif %}
+  {% if source == "custom" %}
+  {% elif external_mode and not external_results and q %}
+  <p class="subtle">No {{ source }} results found for "{{ q }}".</p>
+  {% elif external_mode and not q %}
+  <p class="subtle">Enter a search term above and press Enter to search {{ source }}.</p>
+  {% endif %}
   <div class="picker-preview-list">
+    <div class="picker-results-head library-results-head">
+      <span></span>
+      <span>Food</span>
+      <span>Net Carbs</span>
+      <span>Protein</span>
+      <span>Fat</span>
+      <span>Calories</span>
+    </div>
+    {% if external_mode %}
+    {% for row in external_results %}
+    <div class="picker-row full-row">
+      <div class="picker-thumb">
+        {% if row.image_url %}
+        <img src="{{ row.image_url }}" alt="{{ row.canonical_name }}">
+        {% else %}
+        <span>{{ row.canonical_name[:1] }}</span>
+        {% endif %}
+      </div>
+      <div class="picker-main">
+        <strong>{{ row.canonical_name }}</strong>
+        <span>{{ row.serving_description }}</span>
+        <small>
+          {{ row.source }}{% if row.brand %} · {{ row.brand }}{% endif %} · confidence {{ "%.2f"|format(row.score) }}
+        </small>
+      </div>
+      <div class="picker-macros">
+        <div class="picker-macro-cell">
+          <small>Net Carbs</small>
+          <span class="coral-text">{{ row.net_carbs_g }}g</span>
+        </div>
+        <div class="picker-macro-cell">
+          <small>Protein</small>
+          <span class="blue-text">{{ row.protein_g }}g</span>
+        </div>
+        <div class="picker-macro-cell">
+          <small>Fat</small>
+          <span class="gold-text">{{ row.fat_g }}g</span>
+        </div>
+        <div class="picker-macro-cell">
+          <small>Calories</small>
+          <strong>{{ row.calories }}</strong>
+        </div>
+      </div>
+      <div class="row-actions row-actions-stack">
+        <form action="/foods/external/save" method="post">
+          <input type="hidden" name="candidate_json" value="{{ row.candidate_json|e }}">
+          <input type="hidden" name="source" value="{{ source }}">
+          <input type="hidden" name="q" value="{{ q }}">
+          <button class="link-button" type="submit" name="action" value="save">Save</button>
+          <button class="link-button" type="submit" name="action" value="save_add">Save and add</button>
+          <button class="link-button" type="submit" name="action" value="save_edit">Save and edit</button>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    {% if q %}
+    <p>No foods found.</p>
+    {% endif %}
+    {% endfor %}
+    {% else %}
     {% for card in food_cards %}
     {% set food = card.food %}
     <div class="picker-row full-row">
+      <div class="picker-thumb">
+        {% if food.image_url %}
+        <img src="{{ food.image_url }}" alt="{{ food.canonical_name }}">
+        {% elif food.icon_symbol %}
+        <span class="food-icon-symbol">{{ food.icon_symbol }}</span>
+        {% else %}
+        <span>{{ food.canonical_name[:1] }}</span>
+        {% endif %}
+      </div>
       <div class="picker-main">
         <strong><a href="/foods/{{ food.id }}">{{ food.canonical_name }}</a></strong>
-        <span>{{ food.serving_description }}{% if food.grams_per_serving %} / {{ food.grams_per_serving }}g{% endif %}</span>
+        <span>{{ food.serving_description }}</span>
         <small>
           {{ food.source }}{% if food.brand %} · {{ food.brand }}{% endif %}
           {% if card.log_count > 0 %} · logged {{ card.log_count }}x{% endif %}
         </small>
       </div>
       <div class="picker-macros">
-        <span class="coral-text">{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}g</span>
-        <span class="blue-text">{{ food.protein_g }}g</span>
-        <span class="gold-text">{{ food.fat_g }}g</span>
-        <strong>{{ food.calories }}</strong>
+        <div class="picker-macro-cell">
+          <small>Net Carbs</small>
+          <span class="coral-text">{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}g</span>
+        </div>
+        <div class="picker-macro-cell">
+          <small>Protein</small>
+          <span class="blue-text">{{ food.protein_g }}g</span>
+        </div>
+        <div class="picker-macro-cell">
+          <small>Fat</small>
+          <span class="gold-text">{{ food.fat_g }}g</span>
+        </div>
+        <div class="picker-macro-cell">
+          <small>Calories</small>
+          <strong>{{ food.calories }}</strong>
+        </div>
       </div>
       <span class="row-actions">
         {% if food.source == "custom" %}
@@ -53,6 +152,7 @@
     {% else %}
     <p>No foods found.</p>
     {% endfor %}
+    {% endif %}
   </div>
 </section>
 {% endblock %}

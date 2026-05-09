@@ -4,15 +4,328 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title or "MML Food Tracking" }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='app-icon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v=20260501a">
 </head>
 <body>
   <div class="page-shell">
+    <div class="shell-glow shell-glow-a"></div>
+    <div class="shell-glow shell-glow-b"></div>
+    <div class="shell-grid"></div>
     <main class="content">
       {% block content %}{% endblock %}
     </main>
   </div>
   <script>
+    const PICKER_UNIT_TO_GRAMS = {
+      g: 1.0,
+      gram: 1.0,
+      grams: 1.0,
+      oz: 28.3495,
+      ounce: 28.3495,
+      ounces: 28.3495,
+      lb: 453.592,
+      lbs: 453.592,
+      tbsp: 14.0,
+      tsp: 4.67,
+      stick: 113.0,
+      sticks: 113.0,
+      cup: 240.0,
+      cups: 240.0,
+    };
+
+    const roundPickerValue = (value) => Math.round(value * 100) / 100;
+    const formatPickerMacro = (value) => `${roundPickerValue(value).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1")}g`;
+    const formatPickerCalories = (value) => roundPickerValue(value).toFixed(1).replace(/\.0$/, ".0");
+
+    const updatePickerRowPreview = (form) => {
+      if (!(form instanceof HTMLFormElement)) {
+        return;
+      }
+      const quantityInput = form.querySelector('input[name="quantity"]');
+      const unitSelect = form.querySelector('select[name="unit"]');
+      const netCarbsNode = form.querySelector(".js-picker-net-carbs");
+      const proteinNode = form.querySelector(".js-picker-protein");
+      const fatNode = form.querySelector(".js-picker-fat");
+      const caloriesNode = form.querySelector(".js-picker-calories");
+      if (
+        !(quantityInput instanceof HTMLInputElement) ||
+        !(unitSelect instanceof HTMLSelectElement) ||
+        !(netCarbsNode instanceof HTMLElement) ||
+        !(proteinNode instanceof HTMLElement) ||
+        !(fatNode instanceof HTMLElement) ||
+        !(caloriesNode instanceof HTMLElement)
+      ) {
+        return;
+      }
+
+      const quantity = Math.max(parseFloat(quantityInput.value || "0") || 0, 0);
+      const unit = (unitSelect.value || "").toLowerCase();
+      const gramsPerServing = parseFloat(form.dataset.gramsPerServing || "0") || 0;
+      let multiplier = quantity;
+      if (unit in PICKER_UNIT_TO_GRAMS && gramsPerServing > 0) {
+        multiplier = (quantity * PICKER_UNIT_TO_GRAMS[unit]) / gramsPerServing;
+      }
+
+      const baseNetCarbs = parseFloat(form.dataset.baseNetCarbs || "0") || 0;
+      const baseProtein = parseFloat(form.dataset.baseProtein || "0") || 0;
+      const baseFat = parseFloat(form.dataset.baseFat || "0") || 0;
+      const baseCalories = parseFloat(form.dataset.baseCalories || "0") || 0;
+
+      netCarbsNode.textContent = formatPickerMacro(baseNetCarbs * multiplier);
+      proteinNode.textContent = formatPickerMacro(baseProtein * multiplier);
+      fatNode.textContent = formatPickerMacro(baseFat * multiplier);
+      caloriesNode.textContent = formatPickerCalories(baseCalories * multiplier);
+    };
+
+    document.querySelectorAll(".js-picker-row-form").forEach((form) => {
+      const quantityInput = form.querySelector('input[name="quantity"]');
+      const unitSelect = form.querySelector('select[name="unit"]');
+      updatePickerRowPreview(form);
+      quantityInput?.addEventListener("input", () => updatePickerRowPreview(form));
+      quantityInput?.addEventListener("change", () => updatePickerRowPreview(form));
+      unitSelect?.addEventListener("change", () => updatePickerRowPreview(form));
+    });
+
+    document.querySelectorAll(".row-overflow-menu > .row-overflow-trigger").forEach((summary) => {
+      if (summary.classList.contains("meal-overflow-trigger")) {
+        return;
+      }
+      summary.addEventListener("click", (event) => {
+        event.preventDefault();
+        const details = summary.parentElement;
+        if (!(details instanceof HTMLDetailsElement)) {
+          return;
+        }
+
+        const willOpen = !details.open;
+        document.querySelectorAll(".row-overflow-menu[open]").forEach((openDetails) => {
+          if (openDetails instanceof HTMLDetailsElement && openDetails !== details) {
+            openDetails.open = false;
+          }
+        });
+        details.open = willOpen;
+      });
+    });
+
+    document.querySelectorAll(".meal-overflow-trigger").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        const menu = button.closest('.meal-overflow-menu');
+        if (!(menu instanceof HTMLElement)) {
+          return;
+        }
+        const willOpen = !menu.classList.contains('open');
+        document.querySelectorAll('.meal-overflow-menu.open').forEach((openMenu) => {
+          if (openMenu instanceof HTMLElement && openMenu !== menu) {
+            openMenu.classList.remove('open');
+          }
+        });
+        menu.classList.toggle('open', willOpen);
+      });
+    });
+
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      document.querySelectorAll(".row-overflow-menu[open]").forEach((openDetails) => {
+        if (!(openDetails instanceof HTMLDetailsElement)) {
+          return;
+        }
+        if (!openDetails.contains(target)) {
+          openDetails.open = false;
+        }
+      });
+      document.querySelectorAll('.meal-overflow-menu.open').forEach((menu) => {
+        if (menu instanceof HTMLElement && !menu.contains(target)) {
+          menu.classList.remove('open');
+        }
+      });
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      document.querySelectorAll(".row-overflow-menu[open]").forEach((openDetails) => {
+        if (openDetails instanceof HTMLDetailsElement) {
+          openDetails.open = false;
+        }
+      });
+      document.querySelectorAll('.meal-overflow-menu.open').forEach((menu) => {
+        if (menu instanceof HTMLElement) {
+          menu.classList.remove('open');
+        }
+      });
+      closeMealModal();
+      if (mealMoveMode) {
+        setMealMoveMode(false);
+      }
+    });
+
+
+    const mealCopyModal = document.getElementById("meal-copy-modal");
+    const mealCopySourceDate = document.getElementById("meal-copy-source-date");
+    const mealCopySourceLabel = document.getElementById("meal-copy-source-label");
+    const mealCopyTargetDate = document.getElementById("meal-copy-target-date");
+    const mealCopyTargetLabel = document.getElementById("meal-copy-target-label");
+    const mealCopyRedirect = document.getElementById("meal-copy-redirect");
+    const mealMoveForm = document.getElementById("meal-move-form");
+    const mealMoveTargetLabel = document.getElementById("meal-move-target-label");
+    const mealMoveTargetDate = document.getElementById("meal-move-target-date");
+    const mealMoveRedirect = document.getElementById("meal-move-redirect");
+
+    const closeMealModal = () => {
+      if (mealCopyModal instanceof HTMLElement) {
+        mealCopyModal.hidden = true;
+      }
+    };
+
+    document.querySelectorAll(".meal-copy-open").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (!(mealCopyModal instanceof HTMLElement)) {
+          return;
+        }
+        if (mealCopySourceDate instanceof HTMLInputElement) {
+          mealCopySourceDate.value = button.dataset.sourceDate || mealCopySourceDate.value;
+        }
+        if (mealCopySourceLabel instanceof HTMLInputElement) {
+          mealCopySourceLabel.value = button.dataset.sourceMeal || mealCopySourceLabel.value;
+        }
+        if (mealCopyTargetDate instanceof HTMLInputElement) {
+          mealCopyTargetDate.value = button.dataset.sourceDate || mealCopyTargetDate.value;
+        }
+        if (mealCopyTargetLabel instanceof HTMLSelectElement) {
+          mealCopyTargetLabel.value = button.dataset.defaultTargetMeal || button.dataset.sourceMeal || mealCopyTargetLabel.value;
+        }
+        if (mealCopyRedirect instanceof HTMLInputElement) {
+          mealCopyRedirect.value = button.dataset.redirectTo || window.location.pathname + window.location.search;
+        }
+        mealCopyModal.hidden = false;
+      });
+    });
+
+    document.querySelectorAll("[data-close-meal-modal]").forEach((button) => {
+      button.addEventListener("click", closeMealModal);
+    });
+
+    let mealMoveMode = false;
+    let activeDraggedHandle = null;
+    let activeDragGhost = null;
+    const setMealMoveMode = (enabled) => {
+      mealMoveMode = enabled;
+      document.body.classList.toggle("meal-move-mode", enabled);
+      document.querySelectorAll(".meal-card.drop-target").forEach((card) => card.classList.remove("drop-target"));
+      document.querySelectorAll(".row-overflow-menu[open]").forEach((details) => {
+        if (details instanceof HTMLDetailsElement) {
+          details.open = false;
+        }
+      });
+      document.querySelectorAll(".meal-overflow-menu.open").forEach((menu) => {
+        if (menu instanceof HTMLElement) {
+          menu.classList.remove("open");
+        }
+      });
+      document.querySelectorAll(".meal-row.drag-source").forEach((row) => {
+        if (row instanceof HTMLElement) {
+          row.classList.remove("drag-source");
+        }
+      });
+    };
+
+    document.querySelectorAll(".meal-move-toggle").forEach((button) => {
+      button.addEventListener("click", () => {
+        setMealMoveMode(!mealMoveMode);
+      });
+    });
+
+    document.querySelectorAll(".meal-drag-handle").forEach((handle) => {
+      handle.addEventListener("dragstart", (event) => {
+        if (!mealMoveMode || !(event.dataTransfer instanceof DataTransfer)) {
+          event.preventDefault();
+          return;
+        }
+        const mealRow = handle.closest(".meal-row");
+        const mealCard = handle.closest(".meal-card[data-meal-label][data-target-date]");
+        if (!(mealRow instanceof HTMLElement) || !(mealCard instanceof HTMLElement)) {
+          event.preventDefault();
+          return;
+        }
+        activeDraggedHandle = handle;
+        mealRow.classList.add("drag-source");
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", handle.dataset.itemId || "");
+        event.dataTransfer.setData("application/x-meal-label", mealCard.dataset.mealLabel || "");
+        event.dataTransfer.setData("application/x-meal-date", mealCard.dataset.targetDate || "");
+
+        const title = mealRow.querySelector(".meal-item-main strong")?.textContent?.trim() || "Move item";
+        const ghost = document.createElement("div");
+        ghost.className = "drag-ghost";
+        ghost.textContent = title;
+        document.body.appendChild(ghost);
+        activeDragGhost = ghost;
+        event.dataTransfer.setDragImage(ghost, 28, 22);
+      });
+
+      handle.addEventListener("dragend", () => {
+        const mealRow = handle.closest(".meal-row");
+        if (mealRow instanceof HTMLElement) {
+          mealRow.classList.remove("drag-source");
+        }
+        activeDraggedHandle = null;
+        if (activeDragGhost instanceof HTMLElement) {
+          activeDragGhost.remove();
+        }
+        activeDragGhost = null;
+        document.querySelectorAll(".meal-card.drop-target").forEach((card) => card.classList.remove("drop-target"));
+      });
+    });
+
+    document.querySelectorAll(".meal-card[data-meal-label][data-target-date]").forEach((card) => {
+      card.addEventListener("dragover", (event) => {
+        if (!mealMoveMode) {
+          return;
+        }
+        event.preventDefault();
+        card.classList.add("drop-target");
+      });
+      card.addEventListener("dragleave", () => {
+        card.classList.remove("drop-target");
+      });
+      card.addEventListener("drop", (event) => {
+        if (!mealMoveMode || !(mealMoveForm instanceof HTMLFormElement)) {
+          return;
+        }
+        event.preventDefault();
+        card.classList.remove("drop-target");
+        const itemId = event.dataTransfer?.getData("text/plain");
+        if (!itemId) {
+          return;
+        }
+        const sourceMealLabel = event.dataTransfer?.getData("application/x-meal-label") || "";
+        const sourceTargetDate = event.dataTransfer?.getData("application/x-meal-date") || "";
+        if (
+          sourceMealLabel === (card.dataset.mealLabel || "") &&
+          sourceTargetDate === (card.dataset.targetDate || "")
+        ) {
+          return;
+        }
+        if (mealMoveTargetLabel instanceof HTMLInputElement) {
+          mealMoveTargetLabel.value = card.dataset.mealLabel || "";
+        }
+        if (mealMoveTargetDate instanceof HTMLInputElement) {
+          mealMoveTargetDate.value = card.dataset.targetDate || "";
+        }
+        if (mealMoveRedirect instanceof HTMLInputElement) {
+          mealMoveRedirect.value = window.location.pathname + window.location.search;
+        }
+        mealMoveForm.action = `/meal-items/${itemId}/move`;
+        mealMoveForm.submit();
+      });
+    });
+
     document.addEventListener("keydown", (event) => {
       if (
         event.key !== "Enter" ||

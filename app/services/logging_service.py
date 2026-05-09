@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Food, FoodAlias, FoodResolutionHistory, MealEntry, MealEntryItem
 from app.schemas.logging import LogMealRequest
-from app.services.food_service import create_food
+from app.services.food_service import _source_payload_image_url, create_food
 from app.services.parser import ParsedFoodItem, parse_entry, normalize_text
 from app.services.resolution import FoodResolver, ResolutionResult
 from app.schemas.foods import FoodCreate
@@ -59,6 +59,7 @@ class LoggingService:
         payload = FoodCreate(
             canonical_name=candidate["canonical_name"],
             brand=candidate.get("brand"),
+            image_url=candidate.get("image_url") or _source_payload_image_url(candidate.get("raw_payload")),
             serving_description=candidate["serving_description"],
             grams_per_serving=float(candidate.get("grams_per_serving") or 1.0),
             calories=float(candidate.get("calories") or 0.0),
@@ -72,6 +73,36 @@ class LoggingService:
             authoritative_locked=False,
             source=candidate["source"],
             source_food_id=str(candidate.get("source_food_id") or candidate["canonical_name"]),
+            raw_source_payload=candidate.get("raw_payload"),
+        )
+        return create_food(session, payload)
+
+    def save_external_candidate_as_custom(
+        self,
+        session: Session,
+        result_index: int,
+        candidates: list[dict],
+        alias_phrase: str | None = None,
+    ) -> Food:
+        candidate = candidates[result_index]
+        aliases: list[str] = []
+        if alias_phrase and normalize_text(alias_phrase) != normalize_text(candidate["canonical_name"]):
+            aliases.append(alias_phrase)
+        payload = FoodCreate(
+            canonical_name=candidate["canonical_name"],
+            brand=candidate.get("brand"),
+            image_url=candidate.get("image_url") or _source_payload_image_url(candidate.get("raw_payload")),
+            serving_description=candidate["serving_description"],
+            grams_per_serving=float(candidate.get("grams_per_serving") or 1.0),
+            calories=float(candidate.get("calories") or 0.0),
+            protein_g=float(candidate.get("protein_g") or 0.0),
+            carbs_g=float(candidate.get("carbs_g") or 0.0),
+            fat_g=float(candidate.get("fat_g") or 0.0),
+            fiber_g=candidate.get("fiber_g"),
+            net_carbs_g=candidate.get("net_carbs_g"),
+            aliases=aliases,
+            notes=f"Saved to custom library from {candidate['source']}",
+            authoritative_locked=False,
             raw_source_payload=candidate.get("raw_payload"),
         )
         return create_food(session, payload)

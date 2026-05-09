@@ -1,16 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="dashboard-topbar">
-  <div class="dashboard-topbar-left">
-    <div>
-      <p class="eyebrow">Targets and defaults</p>
-      <h2>Settings</h2>
-    </div>
-  </div>
-  <div class="toggle-row">
-    <a class="button outline" href="/">Home Screen</a>
-  </div>
-</section>
+{% set page_title = "Settings" %}
+{% set page_kicker = "Targets and defaults" %}
+{% set nav_active = "settings" %}
+{% set page_date = today_iso() %}
+{% include "_page_topbar.html" %}
 
 <section class="settings-tabs">
   <button class="top-nav-link active" type="button" data-settings-tab="targets">Daily Targets</button>

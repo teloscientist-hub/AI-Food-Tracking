@@ -1,21 +1,24 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="dashboard-topbar">
-  <div class="dashboard-topbar-left">
-    <div>
-      <p class="eyebrow">Conversational logging</p>
-      <h2>Add Log Entry</h2>
-    </div>
-  </div>
-  <div class="dashboard-date-pill">
-    <span>&lsaquo;</span>
-    <strong>{{ (logged_at or today)[:10] }}</strong>
-    <span>&rsaquo;</span>
-  </div>
-</section>
+{% set page_title = "Add Log Entry" %}
+{% set page_kicker = "Conversational logging" %}
+{% set nav_active = "daily" %}
+{% set page_date = (logged_at or today)[:10] %}
+{% set prev_href = "/log?target_date=" ~ prev_date ~ "&meal_label=" ~ meal_label ~ "&source=" ~ source ~ "&q=" ~ q %}
+{% set next_href = "/log?target_date=" ~ next_date ~ "&meal_label=" ~ meal_label ~ "&source=" ~ source ~ "&q=" ~ q %}
+{% set date_form_action = "/log" %}
+{% set date_hidden_params = {"meal_label": meal_label, "source": source, "q": q} %}
+{% include "_page_topbar.html" %}
 
 <section class="log-layout">
   <article class="panel log-entry-panel">
+    <div class="panel-header">
+      <div>
+        <h3>Text Entry</h3>
+        <p class="subtle">Type a meal naturally, review the matches, then save it.</p>
+      </div>
+      <span class="mini-link">Parser</span>
+    </div>
     {% if error %}
     <div class="save-banner picker-inline-banner">
       <strong>Entry required</strong>
@@ -42,17 +45,15 @@
           <input type="datetime-local" name="logged_at" value="{{ logged_at or today }}">
         </label>
       </div>
-      <div class="quick-chips">
-        {% for phrase in ["Fairlife 42", "protein coffee", "2 eggs", "ribeye", "yogurt bowl"] %}
-        <span class="chip">{{ phrase }}</span>
-        {% endfor %}
-      </div>
       <button class="button primary" type="submit">Parse and review</button>
     </form>
   </article>
   <article class="panel picker-preview log-picker-panel">
     <div class="panel-header">
-      <h3>Picker-style add</h3>
+      <div>
+        <h3>Picker-style Add</h3>
+        <p class="subtle">Search your library, adjust the amount, and add with one tap.</p>
+      </div>
       <span class="mini-link">Embedded</span>
     </div>
     {% if saved %}
@@ -93,37 +94,70 @@
       {% for item in picker_foods %}
       {% set food = item.food %}
       <div class="picker-row picker-row-inline">
-        <div class="picker-thumb">
-          {% if food.image_url %}
-          <img src="{{ food.image_url }}" alt="{{ food.canonical_name }}">
-          {% else %}
-          <span>{{ food.canonical_name[:1] }}</span>
-          {% endif %}
-        </div>
-        <div class="picker-main">
-          <strong><a href="/foods/{{ food.id }}">{{ food.canonical_name }}</a></strong>
-          <span>{{ item.quick_label }}</span>
-          <small>{{ food.brand or food.source|replace("openfoodfacts", "Open Food Facts")|title }}</small>
-        </div>
-        <div class="picker-macros compact-macros">
-          <span class="coral-text">{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}g</span>
-          <span class="blue-text">{{ food.protein_g }}g</span>
-          <span class="gold-text">{{ food.fat_g }}g</span>
-          <strong>{{ food.calories }}</strong>
-        </div>
-        <form action="/log/picker/add" method="post" class="picker-inline-add-form">
+        <form
+          action="/log/picker/add"
+          method="post"
+          class="picker-inline-add-form picker-row-form js-picker-row-form"
+          data-grams-per-serving="{{ food.grams_per_serving or 0 }}"
+          data-base-net-carbs="{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}"
+          data-base-protein="{{ food.protein_g }}"
+          data-base-fat="{{ food.fat_g }}"
+          data-base-calories="{{ food.calories }}"
+        >
           <input type="hidden" name="food_id" value="{{ food.id }}">
-          <input type="hidden" name="unit" value="{{ item.quick_unit or '' }}">
           <input type="hidden" name="meal_label" value="{{ meal_label }}">
           <input type="hidden" name="logged_at" value="{{ logged_at }}">
           <input type="hidden" name="q" value="{{ q }}">
           <input type="hidden" name="source" value="{{ source }}">
           <input type="hidden" name="redirect_to" value="/log">
-          <label>
-            <span>Qty</span>
-            <input type="number" name="quantity" value="{{ item.quick_quantity }}" min="0.001" step="0.001">
-          </label>
-          <button class="icon-add-button" type="submit" aria-label="Add {{ food.canonical_name }}">+</button>
+          <div class="picker-thumb">
+            {% if food.image_url %}
+            <img src="{{ food.image_url }}" alt="{{ food.canonical_name }}">
+            {% elif food.icon_symbol %}
+            <span class="food-icon-symbol">{{ food.icon_symbol }}</span>
+            {% else %}
+            <span>{{ food.canonical_name[:1] }}</span>
+            {% endif %}
+          </div>
+          <div class="picker-main picker-main-compact">
+            <strong><a href="/foods/{{ food.id }}">{{ food.canonical_name }}</a></strong>
+            <div class="picker-controls-row">
+              <label class="picker-inline-control">
+                <span>Qty</span>
+                <input class="picker-quantity-input" type="number" min="0" step="0.001" inputmode="decimal" name="quantity" value="{{ item.quick_quantity }}">
+              </label>
+              <label class="picker-inline-control">
+                <span>Type</span>
+                <select name="unit">
+                  {% for option in item.unit_options %}
+                  <option value="{{ option.value }}" {% if item.quick_unit == option.value %}selected{% endif %}>{{ option.label }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+            </div>
+            <small>{{ food.brand or food.source|replace("openfoodfacts", "Open Food Facts")|title }}</small>
+          </div>
+          <div class="picker-right-cluster">
+            <div class="picker-macros compact-macros">
+              <div class="picker-macro-cell">
+                <small>Net Carbs</small>
+                <span class="coral-text js-picker-net-carbs">{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}g</span>
+              </div>
+              <div class="picker-macro-cell">
+                <small>Protein</small>
+                <span class="blue-text js-picker-protein">{{ food.protein_g }}g</span>
+              </div>
+              <div class="picker-macro-cell">
+                <small>Fat</small>
+                <span class="gold-text js-picker-fat">{{ food.fat_g }}g</span>
+              </div>
+              <div class="picker-macro-cell">
+                <small>Cals</small>
+                <strong class="js-picker-calories">{{ food.calories }}</strong>
+              </div>
+            </div>
+            <button class="icon-add-button" type="submit" aria-label="Add {{ food.canonical_name }}">+</button>
+          </div>
         </form>
       </div>
       {% else %}

@@ -1,0 +1,37 @@
+<div id="meal-copy-modal" class="meal-modal" hidden>
+  <div class="meal-modal-backdrop" data-close-meal-modal></div>
+  <div class="meal-modal-card panel">
+    <div class="panel-header">
+      <h3>Choose Date and Meal To Copy To</h3>
+      <button class="button ghost" type="button" data-close-meal-modal>Close</button>
+    </div>
+    <form action="/meals/copy" method="post" class="stack meal-copy-form">
+      <input type="hidden" name="source_date" id="meal-copy-source-date" value="{{ copy_modal_date }}">
+      <input type="hidden" name="source_meal_label" id="meal-copy-source-label" value="Breakfast">
+      <input type="hidden" name="redirect_to" id="meal-copy-redirect" value="{{ copy_modal_redirect }}">
+      <div class="form-grid compact-grid">
+        <label>
+          <span>Date</span>
+          <input type="date" name="target_date" id="meal-copy-target-date" value="{{ copy_modal_date }}">
+        </label>
+        <label>
+          <span>Meal</span>
+          <select name="target_meal_label" id="meal-copy-target-label">
+            {% for option in meal_options %}
+            <option value="{{ option }}">{{ option }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="meal-modal-actions">
+        <button class="button ghost" type="button" data-close-meal-modal>Cancel</button>
+        <button class="button primary" type="submit">Copy Meal</button>
+      </div>
+    </form>
+  </div>
+</div>
+<form id="meal-move-form" method="post" hidden>
+  <input type="hidden" name="target_meal_label" id="meal-move-target-label">
+  <input type="hidden" name="target_date" id="meal-move-target-date">
+  <input type="hidden" name="redirect_to" id="meal-move-redirect" value="{{ copy_modal_redirect }}">
+</form>

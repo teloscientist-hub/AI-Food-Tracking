@@ -1,25 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="dashboard-topbar">
-  <div class="dashboard-topbar-left">
-    <div class="brand-lockup">
-      <span class="brand-kicker">MML</span>
-      <strong>Food Tracking</strong>
-    </div>
-    <nav class="top-nav">
-      <a class="top-nav-link active" href="/">Dashboard</a>
-      <a class="top-nav-link" href="/foods">Foods Library</a>
-      <a class="top-nav-link" href="/daily/{{ daily.date }}">Daily Log</a>
-      <a class="top-nav-link" href="/weekly">Weekly Trends</a>
-      <a class="top-nav-link" href="/settings">Settings</a>
-    </nav>
-  </div>
-  <div class="dashboard-date-pill">
-    <span>&lsaquo;</span>
-    <strong>{{ daily.date }}</strong>
-    <span>&rsaquo;</span>
-  </div>
-</section>
+{% set page_title = "Dashboard" %}
+{% set nav_active = "dashboard" %}
+{% set page_date = daily.date %}
+{% set selected_date = selected_date %}
+{% set prev_href = "/?target_date=" ~ prev_date ~ "&metric=" ~ metric %}
+{% set next_href = "/?target_date=" ~ next_date ~ "&metric=" ~ metric %}
+{% set date_form_action = "/" %}
+{% set date_hidden_metric = metric %}
+{% set dashboard_return = "/?target_date=" ~ daily.date ~ "&metric=" ~ metric %}
+{% include "_page_topbar.html" %}
 
 <section class="dashboard-grid">
   <article class="panel dashboard-card compact-card">
@@ -40,13 +30,6 @@
             </strong>
           </div>
           <div class="bar soft"><span style="width: {{ progress[key] }}%"></span></div>
-          <div class="macro-row-sub">
-            {% if daily[key] and daily[key].remaining > 0 %}
-            {{ daily[key].remaining }}g left
-            {% else %}
-            {{ ((daily[key].remaining if daily[key] else 0) * -1) | round(2) }}g over
-            {% endif %}
-          </div>
         </div>
         {% endfor %}
       </div>
@@ -59,13 +42,6 @@
           <strong>{{ daily.calories.consumed }} / {{ daily.calories.target or 0 }}</strong>
         </div>
         <div class="bar soft"><span style="width: {{ progress.calories }}%"></span></div>
-        <div class="macro-row-sub">
-          {% if daily.calories.remaining > 0 %}
-          {{ daily.calories.remaining }} left
-          {% else %}
-          {{ (daily.calories.remaining * -1) | round(2) }} over
-          {% endif %}
-        </div>
       </div>
     </div>
     <div class="macro-footnotes">
@@ -148,15 +124,22 @@
       {% endif %}
     </div>
     <div class="week-chart">
+      <div class="week-axis">
+        {% for label in week_axis.labels %}
+        <span>{{ label|round(0)|int if label == (label|round(0)) else label }}</span>
+        {% endfor %}
+      </div>
+      <div class="week-plot">
       {% for day in weekly.days %}
       {% set value = day[weekly_metric_key] %}
       <div class="week-col">
         <div class="week-bar-track">
-          <span class="week-bar {% if loop.last %}is-today{% endif %}" style="height: {{ ((value / max_metric) * 100) if max_metric else 0 }}%"></span>
+          <span class="week-bar {% if loop.last %}is-today{% endif %}" style="height: {{ ((value / week_axis.max) * 100) if week_axis.max else 0 }}%"></span>
         </div>
         <span class="week-day">{{ day.day[0] }}</span>
       </div>
       {% endfor %}
+      </div>
     </div>
     <a class="button outline full" href="/weekly">Weekly Summary</a>
   </article>
@@ -164,6 +147,12 @@
 
 <section class="dashboard-home-layout">
   <aside class="panel quick-log-panel split-layout">
+    <div class="panel-header quick-log-head">
+      <div>
+        <h3>Quick Log</h3>
+      </div>
+      <span class="mini-link">Today</span>
+    </div>
     {% if error %}
     <div class="save-banner picker-inline-banner">
       <strong>Entry required</strong>
@@ -190,11 +179,6 @@
           <input type="datetime-local" name="logged_at" value="{{ logged_at }}">
         </label>
       </div>
-      <div class="quick-chips">
-        {% for phrase in ["Fairlife 42", "protein coffee", "2 eggs", "ribeye", "yogurt bowl"] %}
-        <span class="chip">{{ phrase }}</span>
-        {% endfor %}
-      </div>
       <button class="button primary" type="submit">Parse and review</button>
     </form>
 
@@ -204,68 +188,139 @@
         <h3>Exercise</h3>
         <span class="mini-link">Today</span>
       </div>
-      <label class="inline exercise-check">
-        <input type="checkbox" name="did_zone2" value="1" {% if exercise_checkin.did_zone2 %}checked{% endif %}>
-        <span>Did Zone 2?</span>
-      </label>
-      <label>
-        <span>Zone 4 Minutes</span>
-        <input type="number" name="zone4_minutes" min="0" step="1" value="{{ exercise_checkin.zone4_minutes }}">
-      </label>
-      <label class="inline exercise-check">
-        <input type="checkbox" name="did_push_workout" value="1" {% if exercise_checkin.did_push_workout %}checked{% endif %}>
-        <span>Push Workout</span>
-      </label>
-      <label class="inline exercise-check">
-        <input type="checkbox" name="did_pull_workout" value="1" {% if exercise_checkin.did_pull_workout %}checked{% endif %}>
-        <span>Pull Workout</span>
-      </label>
+      <div class="form-grid compact-grid exercise-minutes-grid">
+        <label>
+          <span>Zone 2 Minutes</span>
+          <input type="number" name="zone2_minutes" min="0" step="1" value="{{ exercise_checkin.zone2_minutes }}">
+        </label>
+        <label>
+          <span>Zone 4 Minutes</span>
+          <input type="number" name="zone4_minutes" min="0" step="1" value="{{ exercise_checkin.zone4_minutes }}">
+        </label>
+      </div>
+      <div class="form-grid compact-grid exercise-check-grid">
+        <label class="inline exercise-check">
+          <input type="checkbox" name="did_push_workout" value="1" {% if exercise_checkin.did_push_workout %}checked{% endif %}>
+          <span>Push Workout</span>
+        </label>
+        <label class="inline exercise-check">
+          <input type="checkbox" name="did_pull_workout" value="1" {% if exercise_checkin.did_pull_workout %}checked{% endif %}>
+          <span>Pull Workout</span>
+        </label>
+      </div>
       <button class="button secondary" type="submit">Save exercise</button>
     </form>
   </aside>
 
   <div class="meal-stack">
     {% for group in meal_sections %}
-    <section class="panel meal-card">
+    <section class="panel meal-card" data-meal-label="{{ group.label }}" data-target-date="{{ selected_date }}">
       <div class="panel-header meal-card-header">
         <h3>{{ group.label }}</h3>
-        <span class="mini-link">&#8942;</span>
+        <div class="row-overflow-menu meal-overflow-menu">
+          <button class="row-overflow-trigger meal-overflow-trigger" type="button" aria-label="Meal actions">&#8942;</button>
+          <div class="row-overflow-panel meal-overflow-panel">
+            <button class="overflow-action copy meal-copy-open" type="button" data-source-date="{{ selected_date }}" data-source-meal="{{ group.label }}" data-default-target-meal="{{ group.label }}" data-redirect-to="{{ dashboard_return }}">Copy To...</button>
+          <button class="overflow-action edit meal-move-toggle" type="button">Move</button>
+            <form action="/meals/clear" method="post">
+              <input type="hidden" name="source_date" value="{{ selected_date }}">
+              <input type="hidden" name="source_meal_label" value="{{ group.label }}">
+              <input type="hidden" name="redirect_to" value="{{ dashboard_return }}">
+              <button class="overflow-action remove" type="submit">Remove All</button>
+            </form>
+          </div>
+        </div>
       </div>
       {% if group.entries %}
-        {% for entry in group.entries %}
+          {% for entry in group.entries %}
           {% for item in entry.items %}
           <div class="meal-row">
+            <button class="meal-drag-handle" type="button" draggable="true" data-item-id="{{ item.id }}" aria-label="Move item">⋮⋮</button>
+            <div class="picker-thumb meal-thumb">
+              {% if item.food and item.food.image_url %}
+              <img src="{{ item.food.image_url }}" alt="{{ item.resolved_food_name or item.parsed_phrase }}">
+              {% elif item.food and item.food.icon_key %}
+              <span class="food-icon-symbol">{{ food_icon_symbol(item.food.icon_key) }}</span>
+              {% else %}
+              <span>{{ (item.resolved_food_name or item.parsed_phrase)[:1] }}</span>
+              {% endif %}
+            </div>
             <div class="meal-item-main">
+              {% if item.food_id %}
+              <strong><a href="/foods/{{ item.food_id }}">{{ item.resolved_food_name or item.parsed_phrase }}</a></strong>
+              {% else %}
               <strong>{{ item.resolved_food_name or item.parsed_phrase }}</strong>
+              {% endif %}
               <span>{{ item.quantity }} {{ item.unit or item.serving_description_snapshot or "" }}</span>
             </div>
             <div class="meal-item-macros">
-              <span class="coral-text">{{ item.net_carbs_g_snapshot if item.net_carbs_g_snapshot is not none else item.carbs_g_snapshot }}g</span>
-              <span class="blue-text">{{ item.protein_g_snapshot }}g</span>
-              <span class="gold-text">{{ item.fat_g_snapshot }}g</span>
-              <strong>{{ item.calories_snapshot }}</strong>
+              <div class="picker-macro-cell">
+                <small>Net Carbs</small>
+                <span class="coral-text">{{ item.net_carbs_g_snapshot if item.net_carbs_g_snapshot is not none else item.carbs_g_snapshot }}g</span>
+              </div>
+              <div class="picker-macro-cell">
+                <small>Protein</small>
+                <span class="blue-text">{{ item.protein_g_snapshot }}g</span>
+              </div>
+              <div class="picker-macro-cell">
+                <small>Fat</small>
+                <span class="gold-text">{{ item.fat_g_snapshot }}g</span>
+              </div>
+              <div class="picker-macro-cell">
+                <small>Cals</small>
+                <strong>{{ item.calories_snapshot }}</strong>
+              </div>
             </div>
+            <details class="row-overflow-menu">
+              <summary class="row-overflow-trigger" aria-label="Item actions">&#8942;</summary>
+              <div class="row-overflow-panel">
+                <a class="overflow-action edit" href="/meal-items/{{ item.id }}/edit?redirect_to={{ dashboard_return }}">Edit</a>
+                <form action="/meal-items/{{ item.id }}/copy" method="post">
+                  <input type="hidden" name="redirect_to" value="{{ dashboard_return }}">
+                  <button class="overflow-action copy" type="submit">Copy</button>
+                </form>
+                <form action="/meal-items/{{ item.id }}/delete" method="post">
+                  <input type="hidden" name="redirect_to" value="{{ dashboard_return }}">
+                  <button class="overflow-action remove" type="submit">Remove</button>
+                </form>
+              </div>
+            </details>
           </div>
           {% endfor %}
         {% endfor %}
         <div class="meal-total">
           <div><strong>{{ group.label }} Total</strong></div>
           <div class="meal-item-macros">
-            <span class="coral-text">{{ "%.0f"|format(group.totals.net_carbs) }}g</span>
-            <span class="blue-text">{{ "%.0f"|format(group.totals.protein) }}g</span>
-            <span class="gold-text">{{ "%.0f"|format(group.totals.fat) }}g</span>
-            <strong>{{ "%.0f"|format(group.totals.calories) }}</strong>
+            <div class="picker-macro-cell">
+              <small>Net Carbs</small>
+              <span class="coral-text">{{ "%.0f"|format(group.totals.net_carbs) }}g</span>
+            </div>
+            <div class="picker-macro-cell">
+              <small>Protein</small>
+              <span class="blue-text">{{ "%.0f"|format(group.totals.protein) }}g</span>
+            </div>
+            <div class="picker-macro-cell">
+              <small>Fat</small>
+              <span class="gold-text">{{ "%.0f"|format(group.totals.fat) }}g</span>
+            </div>
+            <div class="picker-macro-cell">
+              <small>Cals</small>
+              <strong>{{ "%.0f"|format(group.totals.calories) }}</strong>
+            </div>
           </div>
         </div>
       {% else %}
       <div class="meal-empty-row"></div>
       {% endif %}
       <div class="meal-actions">
-        <a href="/log?meal_label={{ group.label }}" class="mini-link">Advanced</a>
-        <a href="/log?meal_label={{ group.label }}" class="mini-link">Add {{ group.label }}</a>
+        <a href="/log?meal_label={{ group.label }}&logged_at={{ daily.date }}T12:00" class="mini-link">Advanced</a>
+        <a href="/log?meal_label={{ group.label }}&logged_at={{ daily.date }}T12:00" class="mini-link">Add {{ group.label }}</a>
       </div>
     </section>
     {% endfor %}
   </div>
 </section>
+{% set copy_modal_date = selected_date %}
+{% set copy_modal_redirect = dashboard_return %}
+{% include "_meal_action_modal.html" %}
 {% endblock %}

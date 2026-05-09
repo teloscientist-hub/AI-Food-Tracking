@@ -1,0 +1,194 @@
+[meta]
+name = "mml-food-tracking auto permissions"
+version = 1
+project_root = "/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking"
+last_updated = "2026-05-02"
+maintainer = "Codex + user"
+
+[behavior]
+check_this_file_before_requesting_escalation = true
+append_new_approved_prefixes_here = true
+append_new_permission_requests_to_permission_log = true
+project_file_edits_preapproved = true
+project_file_creation_preapproved = true
+
+[limitations]
+note = "This file is a project-local approval policy for Codex sessions. It guides the agent, but it does not override the Codex app's native approval system. If the app itself does not already have a matching persisted prefix approval, Codex may still prompt the user."
+
+[project_scope]
+root = "/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking"
+editable_paths = ["app/**", "tests/**", "migrations/**", "README.md", ".env.example", "pyproject.toml", ".gitignore", "PERMISSION_LOG.md", "AUTO_PERMISSIONS.toml", "AGENTS.md"]
+rule = "Within this project root, Codex is preapproved to create and edit project files needed for the work, including HTML, CSS, JS, Python, tests, docs, and local policy files."
+notes = "This is a project-local instruction for future Codex sessions. It does not grant broader filesystem permissions outside the project root."
+
+[[approved_prefix]]
+prefix = "python3 -m venv .venv"
+category = "bootstrap"
+source = "permission_log"
+notes = "Safe project bootstrap command."
+
+[[approved_prefix]]
+prefix = "python3 -m pip install"
+category = "bootstrap"
+source = "permission_log"
+notes = "Dependency installation for this repo."
+
+[[approved_prefix]]
+prefix = ".venv/bin/python -m pip install"
+category = "bootstrap"
+source = "existing_approved_prefix"
+notes = "Dependency installation inside project venv."
+
+[[approved_prefix]]
+prefix = ".venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000"
+category = "dev_server"
+source = "permission_log"
+notes = "Start the local FastAPI app."
+
+[[approved_prefix]]
+prefix = ".venv/bin/pytest"
+category = "tests"
+source = "permission_log"
+notes = "Run tests in the project venv."
+
+[[approved_prefix]]
+prefix = ".venv/bin/pytest tests/test_resolution.py"
+category = "tests"
+source = "permission_log"
+notes = "Resolution/ranking verification."
+
+[[approved_prefix]]
+prefix = ".venv/bin/pytest tests/test_off_client.py tests/test_resolution.py"
+category = "tests"
+source = "permission_log"
+notes = "OFF + resolver verification."
+
+[[approved_prefix]]
+prefix = ".venv/bin/pytest tests/test_web_submit.py"
+category = "tests"
+source = "permission_log"
+notes = "Review submit / blank-input verification."
+
+[[approved_prefix]]
+prefix = ".venv/bin/pytest tests/test_picker_foods.py"
+category = "tests"
+source = "permission_log"
+notes = "Picker/library ordering verification."
+
+[[approved_prefix]]
+prefix = "python3 -m compileall app"
+category = "verification"
+source = "existing_approved_prefix"
+notes = "Quick syntax/compile verification."
+
+[[approved_prefix]]
+prefix = ".venv/bin/python"
+category = "inspection"
+source = "existing_approved_prefix"
+notes = "Allowed in this environment, but use narrowly for in-process checks."
+
+[[approved_prefix]]
+prefix = "kill"
+category = "dev_server"
+source = "permission_log"
+notes = "Stop a stale local dev server."
+
+[[approved_prefix]]
+prefix = "lsof -t -iTCP:8000 -sTCP:LISTEN"
+category = "dev_server"
+source = "permission_log"
+notes = "Find the dev server PID safely."
+
+[[approved_prefix]]
+prefix = "ls -la"
+category = "inspection"
+source = "permission_setup"
+notes = "Inspect the project root while maintaining the local permissions policy."
+
+[[approved_prefix]]
+prefix = "test -f AGENTS.md"
+category = "inspection"
+source = "permission_setup"
+notes = "Check whether the repo already has an AGENTS file before updating project instructions."
+
+[[approved_prefix]]
+prefix = "sed -n"
+category = "inspection"
+source = "permission_setup"
+notes = "Inspect permission-related files such as PERMISSION_LOG.md, AGENTS.md, and ~/.codex/config.toml."
+
+[[approved_prefix]]
+prefix = "rg -n"
+category = "inspection"
+source = "permission_setup"
+notes = "Search project files and Codex config/global state for approval-related entries."
+
+[[approved_prefix]]
+prefix = "git add ."
+category = "git"
+source = "permission_log"
+notes = "Stage project changes."
+
+[[approved_prefix]]
+prefix = "git add -A"
+category = "git"
+source = "permission_log"
+notes = "Stage project changes including deletions."
+
+[[approved_prefix]]
+prefix = "git commit -m"
+category = "git"
+source = "permission_log"
+notes = "Create non-interactive commits."
+
+[[approved_prefix]]
+prefix = "git push origin main"
+category = "git"
+source = "permission_log"
+notes = "Push the main branch."
+
+[[approved_prefix]]
+prefix = "git push -u origin main"
+category = "git"
+source = "permission_log"
+notes = "Initial upstream push."
+
+[[approved_prefix]]
+prefix = "git push origin <branch>"
+category = "git"
+source = "permission_log"
+notes = "Useful once branch workflow expands beyond main."
+
+[[approved_prefix]]
+prefix = "git fetch"
+category = "git"
+source = "permission_log"
+notes = "Fetch remote changes."
+
+[[approved_prefix]]
+prefix = "git remote add"
+category = "git"
+source = "permission_log"
+notes = "Set the repo remote."
+
+[[approved_prefix]]
+prefix = "git remote set-url"
+category = "git"
+source = "permission_log"
+notes = "Update the repo remote."
+
+[[approved_prefix]]
+prefix = "git branch --set-upstream-to=origin/main main"
+category = "git"
+source = "permission_log"
+notes = "Keep local branch tracking configured."
+
+[avoid]
+broad_interpreters = [
+  "python3",
+  "python",
+  "bash",
+  "zsh",
+  "/bin/zsh -lc ..."
+]
+notes = "Do not treat these as blanket-approved from this file alone."

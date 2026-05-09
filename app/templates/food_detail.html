@@ -1,14 +1,37 @@
 {% extends "base.html" %}
 {% block content %}
+{% set page_title = "Food Detail" %}
+{% set page_kicker = "Food detail" %}
+{% set nav_active = "foods" %}
+{% set page_date = today_iso() %}
+{% include "_page_topbar.html" %}
 <section class="hero">
-  <div>
-    <p class="eyebrow">Food detail</p>
+  <div class="food-detail-hero">
+    <div class="food-detail-image">
+      {% if food.image_url %}
+      <img src="{{ food.image_url }}" alt="{{ food.canonical_name }}">
+      {% elif food.icon_symbol %}
+      <span class="food-icon-symbol">{{ food.icon_symbol }}</span>
+      {% else %}
+      <span>{{ food.canonical_name[:1] }}</span>
+      {% endif %}
+    </div>
+    <div>
     <h2>{{ food.canonical_name }}</h2>
-    <p class="subtle">{{ food.brand or "Custom catalog" }} · {{ food.serving_description }} · {{ food.grams_per_serving }}g</p>
+    <p class="subtle">{{ food.brand or "Custom catalog" }} · {{ food.serving_description }}</p>
+    </div>
   </div>
   <div class="toggle-row">
+    <form action="/foods/{{ food.id }}/edit-copy" method="post">
+      <button class="button outline" type="submit">Edit Food</button>
+    </form>
+    <form action="/foods/{{ food.id }}/duplicate" method="post">
+      <button class="button secondary" type="submit">Duplicate Food</button>
+    </form>
     {% if food.source == "custom" %}
-    <a class="button outline" href="/foods/{{ food.id }}/edit">Edit food</a>
+    <form action="/foods/{{ food.id }}/remove" method="post">
+      <button class="button outline" type="submit">Remove from custom library</button>
+    </form>
     {% endif %}
     <a class="button primary" href="/foods">Back to library</a>
   </div>
@@ -22,7 +45,6 @@
     <div class="facts-meta">
       <div><span>Name</span><strong>{{ food.canonical_name }}</strong></div>
       <div><span>Serving Size</span><strong>{{ food.serving_description }}</strong></div>
-      <div><span>Serving Weight</span><strong>{{ food.grams_per_serving }}g</strong></div>
       <div><span>Source</span><strong>{{ food.source }}</strong></div>
       <div><span>Aliases</span><strong>{{ food.aliases|join(", ") if food.aliases else "None" }}</strong></div>
     </div>
@@ -76,12 +98,16 @@
         <input type="hidden" name="source" value="{{ food.source }}">
         <div class="form-grid">
           <label>
-            <span>Servings</span>
+            <span>Quantity</span>
             <input type="number" name="quantity" step="0.001" min="0.001" value="1">
           </label>
           <label>
-            <span>Serving size</span>
-            <input type="text" value="{{ food.serving_description }}" disabled>
+            <span>Units</span>
+            <select name="unit">
+              {% for option in unit_options %}
+              <option value="{{ option.value }}">{{ option.label }}</option>
+              {% endfor %}
+            </select>
           </label>
         </div>
         <label>

@@ -158,6 +158,7 @@ def test_dashboard_context_includes_counts_note_and_exercise(session) -> None:
         ExerciseCheckIn(
             checkin_date=date.today(),
             did_zone2=True,
+            zone2_minutes=45,
             zone4_minutes=18,
             did_push_workout=True,
             did_pull_workout=False,
@@ -170,7 +171,7 @@ def test_dashboard_context_includes_counts_note_and_exercise(session) -> None:
     assert context["custom_food_count"] >= 1
     assert context["unresolved_count"] == 1
     assert context["daily_note"] == "Watch sodium"
-    assert context["exercise_checkin"]["did_zone2"] is True
+    assert context["exercise_checkin"]["zone2_minutes"] == 45
     assert context["exercise_checkin"]["zone4_minutes"] == 18
     assert context["exercise_checkin"]["did_push_workout"] is True
     assert context["exercise_checkin"]["did_pull_workout"] is False

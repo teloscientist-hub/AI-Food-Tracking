@@ -103,6 +103,36 @@ def test_persist_external_candidate_creates_external_food(session) -> None:
     assert created.net_carbs_g == 4.0
 
 
+def test_save_external_candidate_as_custom_creates_custom_food_with_alias(session) -> None:
+    created = LoggingService().save_external_candidate_as_custom(
+        session,
+        0,
+        [
+            {
+                "canonical_name": "Premier Protein Cafe Latte",
+                "brand": "Premier Protein",
+                "source": "openfoodfacts",
+                "source_food_id": "premier-123",
+                "serving_description": "1 bottle",
+                "grams_per_serving": 325.0,
+                "calories": 160.0,
+                "protein_g": 30.0,
+                "carbs_g": 5.0,
+                "fat_g": 3.0,
+                "fiber_g": 1.0,
+                "net_carbs_g": 4.0,
+                "raw_payload": {"id": "payload"},
+            }
+        ],
+        alias_phrase="pure protein cafe latte",
+    )
+
+    assert created.source == "custom"
+    assert created.canonical_name == "Premier Protein Cafe Latte"
+    assert created.brand == "Premier Protein"
+    assert any(alias.phrase == "pure protein cafe latte" for alias in created.aliases)
+
+
 def test_serving_multiplier_converts_unit_weight_against_serving_size(session) -> None:
     butter = create_food(
         session,

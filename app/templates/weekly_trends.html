@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
+{% set page_title = "Weekly Trends" %}
+{% set page_kicker = "Weekly trends" %}
+{% set nav_active = "weekly" %}
+{% set page_date = today_iso() %}
+{% include "_page_topbar.html" %}
 <section class="hero">
   <div>
-    <p class="eyebrow">Weekly trends</p>
-    <h2>Last 7 days</h2>
     <p class="subtle">Average calories {{ weekly.averages.calories }}, protein {{ weekly.averages.protein_g }}g, carbs {{ weekly.averages.carbs_g }}g, fat {{ weekly.averages.fat_g }}g.</p>
   </div>
 </section>
@@ -43,4 +46,3 @@
   </div>
 </section>
 {% endblock %}
-

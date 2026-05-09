@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="MML Food Tracking">
+  <defs>
+    <radialGradient id="yellowGlow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#ffd93d"/>
+      <stop offset="100%" stop-color="#f2bb00"/>
+    </radialGradient>
+    <radialGradient id="blueGlow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#2f89ff"/>
+      <stop offset="100%" stop-color="#0b4ab6"/>
+    </radialGradient>
+    <radialGradient id="redGlow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#ff594f"/>
+      <stop offset="100%" stop-color="#f11e16"/>
+    </radialGradient>
+    <linearGradient id="checkGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#27d17f"/>
+      <stop offset="100%" stop-color="#0e9f57"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="10" y="10" width="236" height="236" rx="64" ry="64" fill="#ffffff"/>
+  <circle cx="128" cy="128" r="102" fill="url(#yellowGlow)"/>
+  <circle cx="128" cy="128" r="76" fill="url(#blueGlow)"/>
+  <circle cx="128" cy="128" r="52" fill="url(#redGlow)"/>
+  <circle cx="128" cy="128" r="40" fill="#ffffff"/>
+
+  <path
+    d="M108 133
+       L122 147
+       L151 111"
+    fill="none"
+    stroke="url(#checkGreen)"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

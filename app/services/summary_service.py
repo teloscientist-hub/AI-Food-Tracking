@@ -183,7 +183,7 @@ class SummaryService:
             "unresolved_count": int(unresolved_count),
             "daily_note": note_body,
             "exercise_checkin": {
-                "did_zone2": exercise_checkin.did_zone2 if exercise_checkin else False,
+                "zone2_minutes": exercise_checkin.zone2_minutes if exercise_checkin and exercise_checkin.zone2_minutes is not None else 0,
                 "zone4_minutes": exercise_checkin.zone4_minutes if exercise_checkin and exercise_checkin.zone4_minutes is not None else 0,
                 "did_push_workout": exercise_checkin.did_push_workout if exercise_checkin else False,
                 "did_pull_workout": exercise_checkin.did_pull_workout if exercise_checkin else False,

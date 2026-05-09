@@ -84,19 +84,60 @@ PACKAGED_FOOD_MARKERS = {
     "cup",
 }
 
+WHOLE_FOOD_PROCESSED_MARKERS = {
+    "dehydrated",
+    "powder",
+    "dried",
+    "baked",
+    "fried",
+    "seasoned",
+    "flavored",
+    "flavour",
+    "style",
+    "chips",
+}
+
+
+def singularize_token(token: str) -> str:
+    if token.endswith("oes") and len(token) > 4:
+        return token[:-2]
+    if token.endswith("ies") and len(token) > 4:
+        return token[:-3] + "y"
+    if token.endswith("es") and len(token) > 3:
+        return token[:-2]
+    if token.endswith("s") and len(token) > 3:
+        return token[:-1]
+    return token
+
+
+def is_simple_whole_food_query(phrase: str) -> bool:
+    tokens = normalized_tokens(phrase)
+    if not tokens:
+        return False
+    if looks_branded(phrase):
+        return False
+    if any(char.isdigit() for char in phrase):
+        return False
+    if tokens & PACKAGED_FOOD_MARKERS:
+        return False
+    return len(tokens) <= 3
+
 
 def normalized_tokens(phrase: str) -> set[str]:
     return set(normalize_text(phrase).split())
 
 
 def source_rank(candidate: ResolutionCandidate) -> tuple[int, float]:
+    if candidate.source == "custom":
+        custom_rank = 0 if candidate.strategy in {"exact_alias", "exact_custom_name"} else 1
+        return (custom_rank, -candidate.confidence)
     if candidate.source == "openfoodfacts":
-        return (0, -candidate.confidence)
-    if candidate.strategy.startswith("usda_branded"):
-        return (1, -candidate.confidence)
-    if candidate.source == "usda":
         return (2, -candidate.confidence)
-    return (3, -candidate.confidence)
+    if candidate.strategy.startswith("usda_branded"):
+        return (3, -candidate.confidence)
+    if candidate.source == "usda":
+        return (4, -candidate.confidence)
+    return (5, -candidate.confidence)
 
 
 def looks_branded(phrase: str) -> bool:
@@ -200,19 +241,17 @@ class FoodResolver:
             return ResolutionResult(parsed_item, "auto", exact_custom, [exact_custom])
 
         fuzzy_matches = self._fuzzy_custom_lookup(session, normalized)
-        if fuzzy_matches:
-            chosen = fuzzy_matches[0] if fuzzy_matches[0].confidence >= 0.9 else None
-            status = "auto" if chosen else "confirm"
-            return ResolutionResult(parsed_item, status, chosen, fuzzy_matches)
-
         external_candidates = self._external_lookup(parsed_item.phrase)
-        if external_candidates:
-            top = external_candidates[0]
+        if fuzzy_matches or external_candidates:
+            combined = sorted([*fuzzy_matches, *external_candidates], key=source_rank)
+            top = combined[0]
+            if top.source == "custom" and top.confidence >= 0.9:
+                return ResolutionResult(parsed_item, "auto", top, combined[:8])
             if top.confidence >= 0.9:
-                return ResolutionResult(parsed_item, "auto", top, external_candidates)
+                return ResolutionResult(parsed_item, "auto", top, combined[:8])
             if top.confidence >= 0.7:
-                return ResolutionResult(parsed_item, "confirm", None, external_candidates)
-            return ResolutionResult(parsed_item, "choose", None, external_candidates)
+                return ResolutionResult(parsed_item, "confirm", None, combined[:8])
+            return ResolutionResult(parsed_item, "choose", None, combined[:8])
 
         return ResolutionResult(parsed_item, "unresolved", None, [])
 
@@ -234,18 +273,14 @@ class FoodResolver:
         return self._food_candidate(food, 0.99, "exact_alias")
 
     def _exact_custom_lookup(self, session: Session, normalized: str) -> ResolutionCandidate | None:
-        food = session.scalar(
-            select(Food)
-            .where(
-                Food.source == "custom",
-                Food.is_current.is_(True),
-                Food.normalized_name == normalized,
-            )
-            .limit(1)
-        )
-        if not food:
-            return None
-        return self._food_candidate(food, 0.97, "exact_custom_name")
+        foods = session.scalars(
+            select(Food).where(Food.source == "custom", Food.is_current.is_(True))
+        ).all()
+        for food in foods:
+            brand_name = normalize_text(f"{food.brand or ''} {food.canonical_name}")
+            if food.normalized_name == normalized or brand_name == normalized:
+                return self._food_candidate(food, 0.97, "exact_custom_name")
+        return None
 
     def _fuzzy_custom_lookup(self, session: Session, normalized: str) -> list[ResolutionCandidate]:
         foods = session.scalars(
@@ -257,6 +292,21 @@ class FoodResolver:
 
         for food in foods:
             score = SequenceMatcher(None, normalized, food.normalized_name).ratio()
+            brand_name = normalize_text(f"{food.brand or ''} {food.canonical_name}")
+            brand_score = SequenceMatcher(None, normalized, brand_name).ratio()
+            score = max(score, brand_score)
+            query_tokens = set(normalized.split())
+            brand_name_tokens = set(brand_name.split())
+            brand_tokens = set(normalize_text(food.brand or "").split())
+            overlap = len(query_tokens & brand_name_tokens)
+            if overlap:
+                score = max(score, min(0.92, 0.58 + (overlap * 0.08)))
+                if query_tokens.issubset(brand_name_tokens):
+                    score = max(score, 0.86)
+            if brand_tokens and query_tokens & brand_tokens:
+                score = max(score, 0.84)
+                if brand_tokens.issubset(query_tokens):
+                    score = max(score, 0.88)
             if score >= 0.72 and food.id not in seen_food_ids:
                 scored.append(self._food_candidate(food, score, "fuzzy_custom_name"))
                 seen_food_ids.add(food.id)
@@ -274,6 +324,9 @@ class FoodResolver:
         search_phrases = build_search_phrases(phrase)
         is_branded = looks_branded(search_phrases[0])
         is_strongly_branded = strongly_branded(search_phrases[0])
+        is_simple_whole_food = is_simple_whole_food_query(search_phrases[0])
+        phrase_tokens = normalized_tokens(search_phrases[0])
+        singular_tokens = {singularize_token(token) for token in phrase_tokens}
         branded_phrases = search_phrases if is_branded else search_phrases[:1]
         generic_phrases = search_phrases[:1]
         candidates: list[ResolutionCandidate] = []
@@ -326,6 +379,10 @@ class FoodResolver:
             bonus = 0.0
             penalty = 0.0
             has_brand = bool(candidate.brand and normalize_text(candidate.brand))
+            raw_payload = candidate.raw_payload or {}
+            data_type = normalize_text(str(raw_payload.get("dataType") or ""))
+            candidate_name_tokens = normalized_tokens(candidate.canonical_name)
+            candidate_singular_tokens = {singularize_token(token) for token in candidate_name_tokens}
             if is_branded:
                 if candidate.source == "openfoodfacts":
                     bonus += 0.08
@@ -337,6 +394,29 @@ class FoodResolver:
                     penalty += 0.1
             if is_strongly_branded and candidate.source == "usda" and not has_brand:
                 penalty += 0.08
+            if is_simple_whole_food:
+                if has_brand:
+                    penalty += 0.35
+                if "branded" in data_type:
+                    penalty += 0.22
+                if candidate.strategy.startswith("usda_branded"):
+                    penalty += 0.12
+                if candidate.source == "openfoodfacts":
+                    penalty += 0.08
+                processed_hits = len(candidate_singular_tokens & WHOLE_FOOD_PROCESSED_MARKERS)
+                if processed_hits:
+                    penalty += min(0.28, 0.18 + ((processed_hits - 1) * 0.05))
+                overlap = len(singular_tokens & candidate_singular_tokens)
+                if overlap:
+                    bonus += min(0.12, overlap * 0.06)
+                if candidate_singular_tokens == singular_tokens:
+                    bonus += 0.12
+                elif singular_tokens.issubset(candidate_singular_tokens):
+                    bonus += 0.06
+                if candidate.source == "usda" and not has_brand:
+                    bonus += 0.06
+                if "raw" in candidate_singular_tokens or "fresh" in candidate_singular_tokens:
+                    bonus += 0.08
             adjusted.append(
                 replace(candidate, confidence=min(0.99, max(0.0, candidate.confidence + bonus - penalty)))
             )
