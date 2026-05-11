@@ -264,15 +264,22 @@ def get_food_library_cards(
     source: str | None = None,
     sort_by: str = "previously_logged",
 ) -> list[dict]:
+    def _timestamp_value(value: object) -> float:
+        if value is None:
+            return 0.0
+        timestamp = getattr(value, "timestamp", None)
+        if callable(timestamp):
+            return float(timestamp())
+        return 0.0
+
     foods = search_foods(session, query, source)
     log_stats = _food_log_stats_map(session)
     cards: list[dict] = []
     for food in foods:
         stats = log_stats.get(food.id, {"log_count": 0, "last_logged_at": None})
         activity_at = max(
-            timestamp
-            for timestamp in [stats["last_logged_at"], food.updated_at, food.created_at]
-            if timestamp is not None
+            [stats["last_logged_at"], food.updated_at, food.created_at],
+            key=_timestamp_value,
         )
         cards.append(
             {
@@ -287,14 +294,14 @@ def get_food_library_cards(
         cards.sort(
             key=lambda card: (
                 -card["log_count"],
-                -(card["last_logged_at"].timestamp() if card["last_logged_at"] else 0),
+                -_timestamp_value(card["last_logged_at"]),
                 card["food"].canonical_name.lower(),
             )
         )
     elif sort_by == "frequent_breakfast":
         cards.sort(
             key=lambda card: (
-                -(card["last_logged_at"].timestamp() if card["last_logged_at"] else 0),
+                -_timestamp_value(card["last_logged_at"]),
                 -card["log_count"],
                 card["food"].canonical_name.lower(),
             )
@@ -302,8 +309,8 @@ def get_food_library_cards(
     else:
         cards.sort(
             key=lambda card: (
-                -(card["last_logged_at"].timestamp() if card["last_logged_at"] else 0),
-                -(card["activity_at"].timestamp() if card["activity_at"] else 0),
+                -_timestamp_value(card["activity_at"]),
+                -_timestamp_value(card["last_logged_at"]),
                 -card["log_count"],
                 card["food"].canonical_name.lower(),
             )

@@ -82,11 +82,21 @@
         <div><span>Macros</span><strong data-preview-macros>{{ preview.calories }} kcal · P {{ preview.protein_g }} · C {{ preview.carbs_g }} · F {{ preview.fat_g }}</strong></div>
       </div>
       {% endif %}
-      <label class="inline">
+      <label class="review-map-option">
         <input type="checkbox" name="always_map_{{ loop.index0 }}" value="1">
-        <span>Always map this phrase in the future</span>
+        <span>
+          <strong>Always map this phrase to this food</strong>
+          <small>Next time you type “{{ item.parsed_item.phrase }}”, this custom match will be used first.</small>
+        </span>
       </label>
       <div class="toggle-row">
+        <button
+          class="button ghost review-ignore-button"
+          type="button"
+          data-ignore-index="{{ loop.index0 }}"
+        >
+          Ignore food
+        </button>
         {% if item.candidates %}
         <button
           class="button outline"
@@ -160,6 +170,20 @@
         if (quantityTextInput instanceof HTMLInputElement && quantityInput instanceof HTMLInputElement) {
           quantityTextInput.value = quantityInput.value;
         }
+        if (value === "exclude") {
+          sourceNode.textContent = "ignored";
+          strategyNode.textContent = "not_included";
+          servingNode.textContent = "—";
+          macrosNode.textContent = "This line will be skipped when you save.";
+          return;
+        }
+        if (value === "unresolved") {
+          sourceNode.textContent = "unresolved";
+          strategyNode.textContent = "save_for_later";
+          servingNode.textContent = "—";
+          macrosNode.textContent = "This line will be saved without macros so you can resolve it later.";
+          return;
+        }
         if (!value.startsWith("external:")) {
           return;
         }
@@ -191,6 +215,18 @@
         primaryAction.click();
       });
       updatePreview();
+    });
+
+    document.querySelectorAll("[data-ignore-index]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const reviewIndex = Number(button.getAttribute("data-ignore-index"));
+        const selectElement = document.querySelector(`[data-candidate-select="${reviewIndex}"]`);
+        if (!(selectElement instanceof HTMLSelectElement)) {
+          return;
+        }
+        selectElement.value = "exclude";
+        selectElement.dispatchEvent(new Event("change", { bubbles: true }));
+      });
     });
   })();
 </script>

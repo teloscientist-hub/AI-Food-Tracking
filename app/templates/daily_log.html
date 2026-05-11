@@ -19,7 +19,7 @@
       <button class="row-overflow-trigger meal-overflow-trigger" type="button" aria-label="Meal actions">&#8942;</button>
       <div class="row-overflow-panel meal-overflow-panel">
         <button class="overflow-action copy meal-copy-open" type="button" data-source-date="{{ target_date }}" data-source-meal="{{ group.label }}" data-default-target-meal="{{ group.label }}" data-redirect-to="{{ daily_return }}">Copy To...</button>
-          <button class="overflow-action edit meal-move-toggle" type="button">Move</button>
+          <button class="overflow-action edit meal-move-toggle" type="button">Reorder / Move</button>
         <form action="/meals/clear" method="post">
           <input type="hidden" name="source_date" value="{{ target_date }}">
           <input type="hidden" name="source_meal_label" value="{{ group.label }}">
