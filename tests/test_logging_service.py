@@ -149,3 +149,21 @@ def test_serving_multiplier_converts_unit_weight_against_serving_size(session) -
 
     assert serving_multiplier(1.0, "tbsp", butter) == 1.0
     assert round(serving_multiplier(2.0, "oz", butter), 2) == round((2.0 * 28.3495) / 14, 2)
+
+
+def test_serving_multiplier_uses_derived_weighted_serving_size(session) -> None:
+    yogurt = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Chobani 20 g protein yogurt",
+            serving_description="190g",
+            grams_per_serving=1,
+            calories=140,
+            protein_g=20,
+            carbs_g=8,
+            fat_g=3,
+        ),
+    )
+
+    assert yogurt.grams_per_serving == 190
+    assert round(serving_multiplier(12.0, "oz", yogurt), 4) == round((12.0 * 28.3495) / 190, 4)

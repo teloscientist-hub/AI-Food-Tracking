@@ -104,6 +104,54 @@ def test_picker_foods_exposes_image_url_from_source_payload(session) -> None:
     assert cards[0]["food"].image_url == "https://example.com/yogurt.png"
 
 
+def test_picker_foods_surfaces_new_custom_food_created_after_logs(session) -> None:
+    logged = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Protein Coffee",
+            serving_description="1 mug",
+            grams_per_serving=355,
+            calories=180,
+            protein_g=30,
+            carbs_g=6,
+            fat_g=4,
+        ),
+    )
+    meal_entry = MealEntry(raw_input_text="protein coffee", meal_label="Breakfast", logged_at=datetime.now(UTC))
+    session.add(meal_entry)
+    session.flush()
+    session.add(
+        MealEntryItem(
+            meal_entry_id=meal_entry.id,
+            food_id=logged.id,
+            parsed_phrase="protein coffee",
+            normalized_phrase="protein coffee",
+            quantity=1.0,
+            unit=None,
+        )
+    )
+    session.commit()
+
+    custom = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Fresh Custom Shake",
+            serving_description="1 bottle",
+            grams_per_serving=330,
+            calories=160,
+            protein_g=30,
+            carbs_g=5,
+            fat_g=3,
+        ),
+    )
+
+    cards = get_picker_foods(session)
+
+    assert cards[0]["food"].id == custom.id
+    assert cards[1]["food"].id == logged.id
+    assert cards[1]["quick_quantity"] == 1.0
+
+
 def test_food_library_prefers_higher_log_count_then_recency(session) -> None:
     egg = create_food(
         session,

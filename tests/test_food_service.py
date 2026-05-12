@@ -8,6 +8,7 @@ from app.services.food_service import (
     get_food_library_cards,
     remove_custom_food_from_library,
     search_foods,
+    serving_description_grams,
     update_food,
 )
 
@@ -43,6 +44,62 @@ def test_create_food_persists_aliases_and_custom_metadata(session, monkeypatch) 
     assert persisted.food_group_key is not None
     assert persisted.image_url == "https://example.com/cheese.png"
     assert persisted.icon_key == "cheese"
+
+
+def test_serving_description_grams_handles_fractional_weight_text() -> None:
+    assert serving_description_grams("190g") == 190
+    assert serving_description_grams("1 portion (311.844 g)") == 311.844
+    assert serving_description_grams("1/2 Ounce") == round(0.5 * 28.3495, 4)
+    assert serving_description_grams("5-1/2 Ounces") == round(5.5 * 28.3495, 4)
+    assert serving_description_grams("3/4 Ounce") == round(0.75 * 28.3495, 4)
+
+
+def test_create_food_derives_grams_per_serving_from_weighted_serving_description(session) -> None:
+    food = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Chobani 20 g protein yogurt",
+            serving_description="190g",
+            grams_per_serving=1,
+            calories=140,
+            protein_g=20,
+            carbs_g=8,
+            fat_g=3,
+        ),
+    )
+
+    assert food.grams_per_serving == 190
+
+
+def test_update_food_derives_grams_per_serving_from_weighted_serving_description(session) -> None:
+    food = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Protein Yogurt",
+            serving_description="1 serving",
+            grams_per_serving=1,
+            calories=140,
+            protein_g=20,
+            carbs_g=8,
+            fat_g=3,
+        ),
+    )
+
+    updated = update_food(
+        session,
+        food.id,
+        FoodUpdate(
+            canonical_name="Protein Yogurt",
+            serving_description="190 g",
+            grams_per_serving=1,
+            calories=140,
+            protein_g=20,
+            carbs_g=8,
+            fat_g=3,
+        ),
+    )
+
+    assert updated.grams_per_serving == 190
 
 
 def test_update_food_versions_custom_food_and_replaces_aliases(session, monkeypatch) -> None:

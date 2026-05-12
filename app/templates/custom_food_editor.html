@@ -55,11 +55,29 @@
           <div class="media-upload-row">
             <label class="button secondary file-button">
               {% if food and food.image_url %}Update image{% else %}Add image{% endif %}
-              <input type="file" name="image_upload" accept="image/*" hidden>
+              <input id="custom-food-image-upload" type="file" name="image_upload" accept="image/*" hidden>
             </label>
-            <span class="subtle">Upload a square image, or use a URL above.</span>
+            {% if food and food.image_url %}
+            <button class="button ghost" type="button" data-edit-current-image data-current-image-url="{{ food.image_url }}" data-current-image-name="{{ food.canonical_name }}">Edit image</button>
+            {% endif %}
+            <span class="subtle" data-image-file-name>{% if food and food.image_url %}Choose a replacement, or edit the current image.{% else %}Upload a square image, or use a URL above.{% endif %}</span>
           </div>
         </label>
+        <div class="form-span-2 image-adjuster" data-image-adjuster hidden>
+          <div class="image-adjuster-canvas-wrap">
+            <canvas width="640" height="640" data-image-crop-canvas aria-label="Selected food image preview"></canvas>
+          </div>
+          <div class="image-adjuster-controls">
+            <button class="button ghost" type="button" data-image-rotate-left>Rotate left</button>
+            <button class="button ghost" type="button" data-image-rotate-right>Rotate right</button>
+            <label class="image-zoom-control">
+              <span>Zoom</span>
+              <input type="range" min="1" max="3" step="0.01" value="1" data-image-zoom>
+            </label>
+            <button class="button secondary" type="button" data-image-center>Center</button>
+          </div>
+          <p class="subtle">Drag the image to position it. The square preview is what will be saved.</p>
+        </div>
         <fieldset class="form-span-2 icon-picker-field">
           <legend>Food icon</legend>
           <div class="icon-picker-grid">
@@ -98,4 +116,227 @@
     </form>
   </article>
 </section>
+
+<script>
+  (() => {
+    const fileInput = document.getElementById("custom-food-image-upload");
+    const adjuster = document.querySelector("[data-image-adjuster]");
+    const canvas = document.querySelector("[data-image-crop-canvas]");
+    const zoomInput = document.querySelector("[data-image-zoom]");
+    const fileNameNode = document.querySelector("[data-image-file-name]");
+    const rotateLeft = document.querySelector("[data-image-rotate-left]");
+    const rotateRight = document.querySelector("[data-image-rotate-right]");
+    const centerButton = document.querySelector("[data-image-center]");
+    const editCurrentImageButton = document.querySelector("[data-edit-current-image]");
+    const form = fileInput?.closest("form");
+    if (!(fileInput instanceof HTMLInputElement) || !(adjuster instanceof HTMLElement) || !(canvas instanceof HTMLCanvasElement) || !(zoomInput instanceof HTMLInputElement) || !(form instanceof HTMLFormElement)) {
+      return;
+    }
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    const state = {
+      image: null,
+      fileName: "food-image.png",
+      rotation: 0,
+      zoom: 1,
+      offsetX: 0,
+      offsetY: 0,
+      dragging: false,
+      lastX: 0,
+      lastY: 0,
+      submittingProcessedImage: false,
+    };
+
+    const canvasPoint = (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: (event.clientX - rect.left) * scaleX,
+        y: (event.clientY - rect.top) * scaleY,
+      };
+    };
+
+    const imageWidth = () => state.image?.naturalWidth || state.image?.width || canvas.width;
+    const imageHeight = () => state.image?.naturalHeight || state.image?.height || canvas.height;
+
+    const rotatedSize = () => {
+      if (!state.image) {
+        return { width: canvas.width, height: canvas.height };
+      }
+      const quarterTurn = Math.abs(state.rotation / 90) % 2 === 1;
+      return {
+        width: quarterTurn ? imageHeight() : imageWidth(),
+        height: quarterTurn ? imageWidth() : imageHeight(),
+      };
+    };
+
+    const resetPosition = () => {
+      state.rotation = 0;
+      state.zoom = 1;
+      state.offsetX = 0;
+      state.offsetY = 0;
+      zoomInput.value = "1";
+    };
+
+    const drawPreview = () => {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "#f5f7fb";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      if (!state.image) {
+        return;
+      }
+      const size = rotatedSize();
+      const baseScale = Math.max(canvas.width / size.width, canvas.height / size.height);
+      const scale = baseScale * state.zoom;
+      context.save();
+      context.translate((canvas.width / 2) + state.offsetX, (canvas.height / 2) + state.offsetY);
+      context.rotate((state.rotation * Math.PI) / 180);
+      context.drawImage(
+        state.image,
+        -(imageWidth() * scale) / 2,
+        -(imageHeight() * scale) / 2,
+        imageWidth() * scale,
+        imageHeight() * scale,
+      );
+      context.restore();
+    };
+
+    const showLoadedImage = (image, file) => {
+      state.image = image;
+      state.fileName = file.name.replace(/\.[^.]+$/, "") || "food-image";
+      resetPosition();
+      adjuster.hidden = false;
+      if (fileNameNode instanceof HTMLElement) {
+        fileNameNode.textContent = file.name;
+      }
+      drawPreview();
+    };
+
+    const setImageFromFile = async (file) => {
+      if (!file) {
+        return;
+      }
+      if ("createImageBitmap" in window) {
+        try {
+          const imageBitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+          showLoadedImage(imageBitmap, file);
+          return;
+        } catch (error) {
+          // Fall through to HTMLImageElement loading when the browser cannot decode this file.
+        }
+      }
+      const image = new Image();
+      const url = URL.createObjectURL(file);
+      image.onload = () => {
+        URL.revokeObjectURL(url);
+        showLoadedImage(image, file);
+      };
+      image.src = url;
+    };
+
+    const setImageFromUrl = (url, name) => {
+      const image = new Image();
+      image.onload = () => {
+        showLoadedImage(image, { name: `${name || "food-image"}.png` });
+      };
+      image.src = url;
+    };
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (file) {
+        setImageFromFile(file);
+      }
+    });
+
+    zoomInput.addEventListener("input", () => {
+      state.zoom = Number(zoomInput.value || "1");
+      drawPreview();
+    });
+
+    rotateLeft?.addEventListener("click", () => {
+      state.rotation = (state.rotation + 270) % 360;
+      drawPreview();
+    });
+
+    rotateRight?.addEventListener("click", () => {
+      state.rotation = (state.rotation + 90) % 360;
+      drawPreview();
+    });
+
+    centerButton?.addEventListener("click", () => {
+      state.offsetX = 0;
+      state.offsetY = 0;
+      drawPreview();
+    });
+
+    editCurrentImageButton?.addEventListener("click", () => {
+      const imageUrl = editCurrentImageButton.getAttribute("data-current-image-url") || "";
+      const imageName = editCurrentImageButton.getAttribute("data-current-image-name") || "food-image";
+      if (imageUrl) {
+        setImageFromUrl(imageUrl, imageName);
+      }
+    });
+
+    canvas.addEventListener("pointerdown", (event) => {
+      if (!state.image) {
+        return;
+      }
+      state.dragging = true;
+      const point = canvasPoint(event);
+      state.lastX = point.x;
+      state.lastY = point.y;
+      canvas.setPointerCapture(event.pointerId);
+    });
+
+    canvas.addEventListener("pointermove", (event) => {
+      if (!state.dragging) {
+        return;
+      }
+      const point = canvasPoint(event);
+      state.offsetX += point.x - state.lastX;
+      state.offsetY += point.y - state.lastY;
+      state.lastX = point.x;
+      state.lastY = point.y;
+      drawPreview();
+    });
+
+    const endDrag = (event) => {
+      if (!state.dragging) {
+        return;
+      }
+      state.dragging = false;
+      if (canvas.hasPointerCapture(event.pointerId)) {
+        canvas.releasePointerCapture(event.pointerId);
+      }
+    };
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
+
+    form.addEventListener("submit", (event) => {
+      if (!state.image || state.submittingProcessedImage) {
+        return;
+      }
+      event.preventDefault();
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          state.submittingProcessedImage = true;
+          form.requestSubmit();
+          return;
+        }
+        const outputFile = new File([blob], `${state.fileName}-square.png`, { type: "image/png" });
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(outputFile);
+        fileInput.files = dataTransfer.files;
+        state.submittingProcessedImage = true;
+        form.requestSubmit();
+      }, "image/png", 0.92);
+    });
+  })();
+</script>
 {% endblock %}

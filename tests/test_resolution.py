@@ -529,3 +529,107 @@ def test_resolution_prefers_custom_for_wilde_brand_phrase(session) -> None:
     assert result.candidates
     assert result.candidates[0].source == "custom"
     assert result.candidates[0].brand == "Wilde"
+
+
+def test_branded_custom_fuzzy_ignores_generic_protein_brand_overlap(session) -> None:
+    create_food(
+        session,
+        FoodCreate(
+            canonical_name="High Protein Bar, Chocolate Peanut Butter",
+            brand="Pure Protein",
+            serving_description="1 bar",
+            grams_per_serving=50,
+            calories=200,
+            protein_g=20,
+            carbs_g=18,
+            fat_g=7,
+            aliases=[],
+        ),
+    )
+    create_food(
+        session,
+        FoodCreate(
+            canonical_name="Nurri Protein Shake",
+            brand="Nurri",
+            serving_description="1 shake",
+            grams_per_serving=330,
+            calories=150,
+            protein_g=30,
+            carbs_g=4,
+            fat_g=3,
+            aliases=[],
+        ),
+    )
+    resolver = FoodResolver(
+        usda_client=FakeClient([]),
+        off_client=FakeClient(
+            [
+                ExternalFoodCandidate(
+                    canonical_name="Premier Protein Shake",
+                    brand="Premier Protein",
+                    source="openfoodfacts",
+                    source_food_id="premier-1",
+                    serving_description="1 shake",
+                    grams_per_serving=330,
+                    calories=160,
+                    protein_g=30,
+                    carbs_g=5,
+                    fat_g=3,
+                    fiber_g=None,
+                    net_carbs_g=None,
+                    raw_source_payload={},
+                    score=0.86,
+                )
+            ]
+        ),
+    )
+
+    result = resolver.resolve(session, parse_food_phrase("one Premier Protein shake"))
+
+    assert result.candidates[0].canonical_name == "Premier Protein Shake"
+    assert all(candidate.brand != "Pure Protein" for candidate in result.candidates)
+
+
+def test_packaged_type_conflict_suppresses_custom_fuzzy_match(session) -> None:
+    create_food(
+        session,
+        FoodCreate(
+            canonical_name="High Protein Bar, Chocolate Peanut Butter",
+            brand="Pure Protein",
+            serving_description="1 bar",
+            grams_per_serving=50,
+            calories=200,
+            protein_g=20,
+            carbs_g=18,
+            fat_g=7,
+            aliases=[],
+        ),
+    )
+    resolver = FoodResolver(
+        usda_client=FakeClient([]),
+        off_client=FakeClient(
+            [
+                ExternalFoodCandidate(
+                    canonical_name="Pure Protein Shake",
+                    brand="Pure Protein",
+                    source="openfoodfacts",
+                    source_food_id="pure-shake-1",
+                    serving_description="1 shake",
+                    grams_per_serving=330,
+                    calories=140,
+                    protein_g=30,
+                    carbs_g=4,
+                    fat_g=2,
+                    fiber_g=None,
+                    net_carbs_g=None,
+                    raw_source_payload={},
+                    score=0.84,
+                )
+            ]
+        ),
+    )
+
+    result = resolver.resolve(session, parse_food_phrase("1 pure protein shake"))
+
+    assert result.candidates[0].canonical_name == "Pure Protein Shake"
+    assert all("Bar" not in candidate.canonical_name for candidate in result.candidates)

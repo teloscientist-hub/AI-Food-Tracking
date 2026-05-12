@@ -32,6 +32,12 @@ templates.env.globals["today_iso"] = lambda: date.today().isoformat()
 templates.env.globals["food_icon_symbol"] = food_icon_symbol
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok", "app": settings.project_name}
+
+
 app.include_router(web_router)
 app.include_router(foods_api_router)
 app.include_router(logs_api_router)

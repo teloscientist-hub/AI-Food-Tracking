@@ -22,6 +22,13 @@ def test_main_pages_render_and_expose_primary_navigation(client) -> None:
     assert 'action="/dashboard/exercise"' in body
 
 
+def test_health_endpoint_reports_ready(client) -> None:
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "app": "MML Food Tracking"}
+
+
 def test_dashboard_and_log_buttons_point_to_live_endpoints(client) -> None:
     dashboard = client.get("/")
     body = dashboard.text
@@ -376,6 +383,43 @@ def test_food_detail_exposes_edit_and_duplicate_actions(client, session) -> None
     remove_response = client.post(f"/foods/{custom.id}/remove", follow_redirects=False)
     assert remove_response.status_code == 303
     assert remove_response.headers["location"] == "/foods?source=custom"
+
+
+def test_custom_food_editor_exposes_image_adjustment_controls(client) -> None:
+    response = client.get("/foods/custom/new")
+
+    assert response.status_code == 200
+    assert 'id="custom-food-image-upload"' in response.text
+    assert 'data-image-crop-canvas' in response.text
+    assert 'data-image-rotate-left' in response.text
+    assert 'data-image-rotate-right' in response.text
+    assert 'data-image-zoom' in response.text
+    assert 'imageOrientation: "from-image"' in response.text
+    assert '<button class="button ghost" type="button" data-edit-current-image' not in response.text
+
+
+def test_custom_food_editor_can_edit_existing_image(client, session) -> None:
+    custom = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Image Edit Food",
+            serving_description="1 serving",
+            grams_per_serving=1,
+            calories=100,
+            protein_g=10,
+            carbs_g=5,
+            fat_g=4,
+            image_data=b"image-bytes",
+            image_content_type="image/png",
+        ),
+    )
+
+    response = client.get(f"/foods/{custom.id}/edit")
+
+    assert response.status_code == 200
+    assert 'data-edit-current-image' in response.text
+    assert f'data-current-image-url="/foods/{custom.id}/image"' in response.text
+    assert 'data-current-image-name="Image Edit Food"' in response.text
 
 
 def test_custom_food_editor_exposes_delete_action_for_custom_food(client, session) -> None:
@@ -756,7 +800,7 @@ def test_dashboard_meal_rows_link_to_food_detail(client, session) -> None:
     )
     session.commit()
 
-    response = client.get("/")
+    response = client.get(f"/?target_date={entry.logged_at.date().isoformat()}")
     assert response.status_code == 200
     assert f'href="/foods/{food.id}"' in response.text
 

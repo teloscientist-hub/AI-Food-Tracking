@@ -48,6 +48,7 @@ app/
   static/
 tests/
 migrations/
+Scripts/
 ```
 
 ## Schema Overview
@@ -125,6 +126,21 @@ uvicorn app.main:app --reload
 6. Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 The app auto-creates the SQLite database and seeds demo foods on startup.
+
+## Run as a Mac App
+
+For day-to-day use on macOS, build the local app wrapper:
+
+```bash
+./Scripts/package_app.sh
+open ".build/MML Food Tracking.app"
+```
+
+The wrapper creates or reuses `.venv`, installs the app dependencies, starts the FastAPI server on `127.0.0.1:8765`, and opens the browser automatically. It is intentionally a local wrapper around this checkout, not a standalone redistributable binary. If you move the repo, rerun `./Scripts/package_app.sh`.
+
+The wrapper stores its user database at `~/Library/Application Support/MML Food Tracking/mml_food_tracking.db` and writes startup logs to `~/Library/Logs/MML Food Tracking/server.log`. On first launch only, it will copy `mml_food_tracking.db` from the repo if that file exists locally; cloned repos normally start with a fresh database and seed data.
+
+To share the app with another Mac user, have them clone the repository, install Python 3.12+, run `./Scripts/package_app.sh`, and open `.build/MML Food Tracking.app`. Each user keeps their own private SQLite database, `.env`, and virtual environment outside of git.
 
 ## Test Instructions
 

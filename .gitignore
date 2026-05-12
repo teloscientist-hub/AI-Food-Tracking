@@ -9,3 +9,7 @@ __pycache__/
 .env
 *.egg-info/
 .DS_Store
+.build/
+build/
+dist/
+*.log

@@ -19,6 +19,63 @@ GRAM_UNIT_OPTIONS = [
     ("oz", "oz"),
 ]
 
+WEIGHT_UNIT_TO_GRAMS = {
+    "g": 1.0,
+    "gram": 1.0,
+    "grams": 1.0,
+    "oz": 28.3495,
+    "ounce": 28.3495,
+    "ounces": 28.3495,
+}
+
+
+def serving_description_grams(serving_description: str | None) -> float | None:
+    if not serving_description:
+        return None
+    match = re.search(
+        r"(?<![a-z0-9/])"
+        r"(?:"
+        r"(?P<mixed_whole>\d+)[-\s]+(?P<mixed_num>\d+)/(?P<mixed_den>\d+)"
+        r"|(?P<frac_num>\d+)/(?P<frac_den>\d+)"
+        r"|(?P<decimal>\d+(?:\.\d+)?)"
+        r")"
+        r"\s*(?P<unit>g|gram|grams|oz|ounce|ounces)\b",
+        serving_description,
+        flags=re.I,
+    )
+    if not match:
+        return None
+    if match.group("mixed_whole"):
+        denominator = float(match.group("mixed_den"))
+        if denominator == 0:
+            return None
+        amount = float(match.group("mixed_whole")) + (float(match.group("mixed_num")) / denominator)
+    elif match.group("frac_num"):
+        denominator = float(match.group("frac_den"))
+        if denominator == 0:
+            return None
+        amount = float(match.group("frac_num")) / denominator
+    else:
+        amount = float(match.group("decimal"))
+    unit = match.group("unit").lower()
+    return round(amount * WEIGHT_UNIT_TO_GRAMS[unit], 4)
+
+
+def _grams_per_serving_from_payload(payload: FoodCreate | FoodUpdate) -> float:
+    explicit_weight = serving_description_grams(payload.serving_description)
+    if explicit_weight and (payload.grams_per_serving is None or payload.grams_per_serving <= 1.0):
+        return explicit_weight
+    return payload.grams_per_serving or 1.0
+
+
+def _timestamp_value(value: object) -> float:
+    if value is None:
+        return 0.0
+    timestamp = getattr(value, "timestamp", None)
+    if callable(timestamp):
+        return float(timestamp())
+    return 0.0
+
 
 def _source_payload_image_url(payload: dict | None) -> str | None:
     if not isinstance(payload, dict):
@@ -88,7 +145,7 @@ def create_food(session: Session, payload: FoodCreate) -> Food:
         image_data=image_data,
         icon_key=payload.icon_key,
         serving_description=payload.serving_description,
-        grams_per_serving=payload.grams_per_serving,
+        grams_per_serving=_grams_per_serving_from_payload(payload),
         calories=payload.calories,
         protein_g=payload.protein_g,
         carbs_g=payload.carbs_g,
@@ -153,7 +210,7 @@ def update_food(session: Session, food_id: int, payload: FoodUpdate) -> Food:
         image_data=image_data or existing.image_data,
         icon_key=payload.icon_key,
         serving_description=payload.serving_description,
-        grams_per_serving=payload.grams_per_serving,
+        grams_per_serving=_grams_per_serving_from_payload(payload),
         calories=payload.calories,
         protein_g=payload.protein_g,
         carbs_g=payload.carbs_g,
@@ -237,24 +294,18 @@ def get_picker_foods(session: Session, query: str | None = None, source: str | N
     if query:
         return [_picker_card(session, food, recent_map.get(food.id)) for food in foods]
 
-    recent_food_ids = [food_id for food_id in recent_map if any(food.id == food_id for food in foods)]
-    ordered_foods: list[Food] = []
-    seen_food_ids: set[int] = set()
+    newest_meal_created_at = _newest_meal_entry_created_at(session)
 
-    food_by_id = {food.id: food for food in foods}
-    for food_id in recent_food_ids:
-        food = food_by_id.get(food_id)
-        if not food or food_id in seen_food_ids:
-            continue
-        ordered_foods.append(food)
-        seen_food_ids.add(food_id)
+    def picker_sort_key(food: Food) -> tuple[int, float, str]:
+        recent_entry = recent_map.get(food.id)
+        food_activity = max(_timestamp_value(food.updated_at), _timestamp_value(food.created_at))
+        if food_activity > _timestamp_value(newest_meal_created_at):
+            return (0, -food_activity, food.canonical_name.lower())
+        if recent_entry:
+            return (1, -_timestamp_value(recent_entry[1]), food.canonical_name.lower())
+        return (2, -food_activity, food.canonical_name.lower())
 
-    for food in foods:
-        if food.id in seen_food_ids:
-            continue
-        ordered_foods.append(food)
-        seen_food_ids.add(food.id)
-
+    ordered_foods = sorted(foods, key=picker_sort_key)
     return [_picker_card(session, food, recent_map.get(food.id)) for food in ordered_foods]
 
 
@@ -264,14 +315,6 @@ def get_food_library_cards(
     source: str | None = None,
     sort_by: str = "previously_logged",
 ) -> list[dict]:
-    def _timestamp_value(value: object) -> float:
-        if value is None:
-            return 0.0
-        timestamp = getattr(value, "timestamp", None)
-        if callable(timestamp):
-            return float(timestamp())
-        return 0.0
-
     foods = search_foods(session, query, source)
     log_stats = _food_log_stats_map(session)
     cards: list[dict] = []
@@ -332,6 +375,10 @@ def _recent_log_map(session: Session) -> dict[int, tuple[MealEntryItem, object]]
             continue
         recent[meal_item.food_id] = (meal_item, meal_entry.logged_at)
     return recent
+
+
+def _newest_meal_entry_created_at(session: Session) -> object:
+    return session.query(func.max(MealEntry.created_at)).scalar()
 
 
 def _food_log_stats_map(session: Session) -> dict[int, dict]:

@@ -97,6 +97,28 @@ WHOLE_FOOD_PROCESSED_MARKERS = {
     "chips",
 }
 
+GENERIC_BRAND_MATCH_TOKENS = {
+    "bar",
+    "bars",
+    "food",
+    "foods",
+    "protein",
+    "shake",
+    "shakes",
+}
+
+PACKAGED_TYPE_TOKENS = {
+    "bar",
+    "bars",
+    "chip",
+    "chips",
+    "coffee",
+    "pudding",
+    "shake",
+    "shakes",
+    "yogurt",
+}
+
 
 def singularize_token(token: str) -> str:
     if token.endswith("oes") and len(token) > 4:
@@ -127,17 +149,28 @@ def normalized_tokens(phrase: str) -> set[str]:
     return set(normalize_text(phrase).split())
 
 
+def meaningful_brand_tokens(phrase: str | None) -> set[str]:
+    return normalized_tokens(phrase or "") - GENERIC_BRAND_MATCH_TOKENS
+
+
+def packaged_type_tokens(phrase: str | None) -> set[str]:
+    return {singularize_token(token) for token in normalized_tokens(phrase or "") if token in PACKAGED_TYPE_TOKENS}
+
+
 def source_rank(candidate: ResolutionCandidate) -> tuple[int, float]:
     if candidate.source == "custom":
-        custom_rank = 0 if candidate.strategy in {"exact_alias", "exact_custom_name"} else 1
-        return (custom_rank, -candidate.confidence)
+        if candidate.strategy in {"exact_alias", "exact_custom_name"}:
+            return (0, -candidate.confidence)
+        if candidate.confidence >= 0.9:
+            return (1, -candidate.confidence)
+        return (4, -candidate.confidence)
     if candidate.source == "openfoodfacts":
         return (2, -candidate.confidence)
     if candidate.strategy.startswith("usda_branded"):
         return (3, -candidate.confidence)
     if candidate.source == "usda":
-        return (4, -candidate.confidence)
-    return (5, -candidate.confidence)
+        return (5, -candidate.confidence)
+    return (6, -candidate.confidence)
 
 
 def looks_branded(phrase: str) -> bool:
@@ -298,15 +331,21 @@ class FoodResolver:
             query_tokens = set(normalized.split())
             brand_name_tokens = set(brand_name.split())
             brand_tokens = set(normalize_text(food.brand or "").split())
+            meaningful_food_brand_tokens = meaningful_brand_tokens(food.brand)
+            meaningful_brand_overlap = query_tokens & meaningful_food_brand_tokens
+            query_type_tokens = packaged_type_tokens(normalized)
+            food_type_tokens = packaged_type_tokens(food.normalized_name)
             overlap = len(query_tokens & brand_name_tokens)
             if overlap:
                 score = max(score, min(0.92, 0.58 + (overlap * 0.08)))
                 if query_tokens.issubset(brand_name_tokens):
                     score = max(score, 0.86)
-            if brand_tokens and query_tokens & brand_tokens:
+            if brand_tokens and meaningful_brand_overlap:
                 score = max(score, 0.84)
-                if brand_tokens.issubset(query_tokens):
-                    score = max(score, 0.88)
+                if meaningful_food_brand_tokens and meaningful_food_brand_tokens.issubset(query_tokens):
+                    score = max(score, 0.94)
+            if query_type_tokens and food_type_tokens and not query_type_tokens & food_type_tokens:
+                score -= 0.24
             if score >= 0.72 and food.id not in seen_food_ids:
                 scored.append(self._food_candidate(food, score, "fuzzy_custom_name"))
                 seen_food_ids.add(food.id)
