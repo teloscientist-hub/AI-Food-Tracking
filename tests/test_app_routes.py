@@ -2,7 +2,8 @@ import io
 import json
 from datetime import UTC, date, datetime, timedelta
 
-from app.models import MealEntry, MealEntryItem
+from app.models import MealEntry, MealEntryItem, HealthMeasurement
+from app.routers.web import _goal_ring_progress, _goal_ring_segments, _macro_pie_progress, _week_axis_for_metric
 from app.schemas.foods import FoodCreate
 from app.services.food_service import create_food
 from app.services.usda_client import ExternalFoodCandidate
@@ -20,6 +21,19 @@ def test_main_pages_render_and_expose_primary_navigation(client) -> None:
     assert 'href="/settings"' in body
     assert 'action="/log/review"' in body
     assert 'action="/dashboard/exercise"' in body
+    assert 'name="weight_lb"' in body
+    assert 'name="body_fat_pct"' in body
+
+
+def test_settings_macro_summary_uses_net_carbs_calories(client) -> None:
+    response = client.get("/settings")
+
+    assert response.status_code == 200
+    assert "Total carbs" not in response.text
+    assert 'id="total_carbs_g"' not in response.text
+    assert '<strong id="carb_cals">600' in response.text
+    assert '<strong id="calculated_calories">2040' in response.text
+    assert "net carbs x 5" in response.text
 
 
 def test_health_endpoint_reports_ready(client) -> None:
@@ -27,6 +41,488 @@ def test_health_endpoint_reports_ready(client) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "app": "MML Food Tracking"}
+
+
+def test_macro_pie_progress_uses_macro_calorie_ratio() -> None:
+    assert _macro_pie_progress(protein_g=25, fat_g=50 / 9, net_carbs_g=10) == {
+        "net_carbs_percent": 25.0,
+        "protein_percent": 50.0,
+        "fat_percent": 25.0,
+        "net_carbs_stop": 25.0,
+        "protein_stop": 75.0,
+        "fat_stop": 100.0,
+    }
+    assert _macro_pie_progress(protein_g=0, fat_g=0, net_carbs_g=0) == {
+        "net_carbs_percent": 0.0,
+        "protein_percent": 0.0,
+        "fat_percent": 0.0,
+        "net_carbs_stop": 0.0,
+        "protein_stop": 0.0,
+        "fat_stop": 0.0,
+    }
+
+
+def test_dashboard_and_daily_log_render_uploaded_meal_item_images(client, session) -> None:
+    food = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Nurri Protein Shake",
+            serving_description="1 shake",
+            grams_per_serving=330,
+            calories=150,
+            protein_g=30,
+            carbs_g=2,
+            fat_g=2,
+            image_data=b"image-bytes",
+            image_content_type="image/png",
+        ),
+    )
+    entry = MealEntry(
+        raw_input_text="nurri protein shake",
+        meal_label="Breakfast",
+        logged_at=datetime.combine(date.today(), datetime.min.time()),
+    )
+    session.add(entry)
+    session.flush()
+    session.add(
+        MealEntryItem(
+            meal_entry_id=entry.id,
+            food_id=food.id,
+            parsed_phrase="nurri protein shake",
+            normalized_phrase="nurri protein shake",
+            quantity=1,
+            unit="shake",
+            quantity_text="1",
+            resolution_status="resolved",
+            resolution_strategy="logged",
+            resolution_confidence=1.0,
+            resolved_food_name=food.canonical_name,
+            resolved_source=food.source,
+            serving_description_snapshot=food.serving_description,
+            grams_per_serving_snapshot=food.grams_per_serving,
+            calories_snapshot=150,
+            protein_g_snapshot=30,
+            carbs_g_snapshot=2,
+            fat_g_snapshot=2,
+        )
+    )
+    session.commit()
+
+    dashboard = client.get("/")
+    daily = client.get(f"/daily/{date.today().isoformat()}")
+
+    assert dashboard.status_code == 200
+    assert daily.status_code == 200
+    assert f'<img src="/foods/{food.id}/image" alt="Nurri Protein Shake">' in dashboard.text
+    assert f'<img src="/foods/{food.id}/image" alt="Nurri Protein Shake">' in daily.text
+
+
+def test_dashboard_macro_pie_uses_macro_calorie_ratio(client, session) -> None:
+    food = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Macro Pie Food",
+            serving_description="1 serving",
+            grams_per_serving=1,
+            calories=200,
+            protein_g=25,
+            carbs_g=10,
+            fat_g=50 / 9,
+            net_carbs_g=10,
+        ),
+    )
+    entry = MealEntry(
+        raw_input_text="macro pie food",
+        meal_label="Breakfast",
+        logged_at=datetime.combine(date.today(), datetime.min.time()),
+    )
+    session.add(entry)
+    session.flush()
+    session.add(
+        MealEntryItem(
+            meal_entry_id=entry.id,
+            food_id=food.id,
+            parsed_phrase="macro pie food",
+            normalized_phrase="macro pie food",
+            quantity=1,
+            unit="serving",
+            quantity_text="1",
+            resolution_status="resolved",
+            resolution_strategy="logged",
+            resolution_confidence=1.0,
+            resolved_food_name=food.canonical_name,
+            resolved_source=food.source,
+            calories_snapshot=200,
+            protein_g_snapshot=25,
+            carbs_g_snapshot=10,
+            fat_g_snapshot=50 / 9,
+            net_carbs_g_snapshot=10,
+        )
+    )
+    session.commit()
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "--macro-net-carbs-stop: 25.0%" in response.text
+    assert "--macro-protein-stop: 75.0%" in response.text
+    assert "--macro-fat-stop: 100.0%" in response.text
+    assert "Net Carbs 25.0%, Protein 50.0%, Fat 25.0%" in response.text
+
+
+def test_goal_ring_segments_darkens_toward_full_color() -> None:
+    segments = _goal_ring_segments(100, "#efaaaa", "#df5a57", segment_count=4)
+
+    assert segments[0] == {"start": 0.0, "length": 25.0, "color": "#eb9695"}
+    assert segments[-1] == {"start": 75.0, "length": 25.0, "color": "#df5a57"}
+
+
+def test_goal_ring_progress_tracks_second_clockwise_lap() -> None:
+    assert _goal_ring_progress(75, 100) == {
+        "base_percent": 75.0,
+        "over_percent": 0.0,
+        "total_percent": 75.0,
+    }
+    assert _goal_ring_progress(125, 100) == {
+        "base_percent": 100.0,
+        "over_percent": 25.0,
+        "total_percent": 125.0,
+    }
+    assert _goal_ring_progress(225, 100) == {
+        "base_percent": 100.0,
+        "over_percent": 100.0,
+        "total_percent": 225.0,
+    }
+
+
+def test_dashboard_goal_rings_render_layered_progress_variables(client) -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "goal-ring-svg" in response.text
+    assert "goal-ring-track" in response.text
+    assert "goal-ring-layer" in response.text
+    assert 'pathLength="100"' in response.text
+
+
+def test_week_axis_exposes_goal_line_metadata() -> None:
+    daily = {
+        "calories": {"target": 2000},
+        "protein": {"target": 180},
+        "carbs": {"target": 150},
+        "fat": {"target": 80},
+        "fiber": {"target": 30},
+        "net_carbs": {"target": 40},
+    }
+    weekly = {"days": [{"calories": value} for value in [0, 1200, 1800, 2100, 2400, 1500, 1900]]}
+
+    axis = _week_axis_for_metric("calories", daily, weekly, "calories")
+
+    assert axis["max"] == 4000.0
+    assert axis["target"] == 2000.0
+    assert axis["target_percent"] == 50.0
+    assert axis["target_label"] == "2,000 goal"
+
+
+def test_dashboard_week_chart_renders_goal_line_and_overage_segments(client, session) -> None:
+    food = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Goal Line Food",
+            serving_description="1 serving",
+            grams_per_serving=1,
+            calories=2500,
+            protein_g=25,
+            carbs_g=10,
+            fat_g=8,
+            net_carbs_g=10,
+        ),
+    )
+    entry = MealEntry(
+        raw_input_text="goal line food",
+        meal_label="Breakfast",
+        logged_at=datetime.combine(date.today(), datetime.min.time()),
+    )
+    session.add(entry)
+    session.flush()
+    session.add(
+        MealEntryItem(
+            meal_entry_id=entry.id,
+            food_id=food.id,
+            parsed_phrase="goal line food",
+            normalized_phrase="goal line food",
+            quantity=1,
+            unit="serving",
+            quantity_text="1",
+            resolution_status="resolved",
+            resolution_strategy="logged",
+            resolution_confidence=1.0,
+            resolved_food_name=food.canonical_name,
+            resolved_source=food.source,
+            calories_snapshot=2500,
+            protein_g_snapshot=25,
+            carbs_g_snapshot=10,
+            fat_g_snapshot=8,
+            net_carbs_g_snapshot=10,
+        )
+    )
+    session.commit()
+
+    response = client.get("/?metric=calories")
+
+    assert response.status_code == 200
+    assert 'class="week-chart metric-calories"' in response.text
+    assert 'class="week-goal-line"' in response.text
+    assert "2,200 goal" in response.text
+    assert 'title="Today: 2500.0 calories"' in response.text
+    assert "week-bar week-bar-total has-value" in response.text
+    assert "week-bar week-bar-over has-value" in response.text
+    assert "week-bar-value" in response.text
+    assert "2,500" in response.text
+
+
+def test_dashboard_week_chart_marks_yesterday_when_today_is_selected(client, session) -> None:
+    food = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Yesterday Chart Food",
+            serving_description="1 serving",
+            grams_per_serving=1,
+            calories=100,
+            protein_g=10,
+            carbs_g=5,
+            fat_g=4,
+            net_carbs_g=5,
+        ),
+    )
+    entry = MealEntry(
+        raw_input_text="yesterday chart food",
+        meal_label="Breakfast",
+        logged_at=datetime.combine(date.today() - timedelta(days=1), datetime.min.time()),
+    )
+    session.add(entry)
+    session.flush()
+    session.add(
+        MealEntryItem(
+            meal_entry_id=entry.id,
+            food_id=food.id,
+            parsed_phrase="yesterday chart food",
+            normalized_phrase="yesterday chart food",
+            quantity=1,
+            unit="serving",
+            quantity_text="1",
+            resolution_status="resolved",
+            resolution_strategy="logged",
+            resolution_confidence=1.0,
+            resolved_food_name=food.canonical_name,
+            resolved_source=food.source,
+            calories_snapshot=100,
+            protein_g_snapshot=10,
+            carbs_g_snapshot=5,
+            fat_g_snapshot=4,
+            net_carbs_g_snapshot=5,
+        )
+    )
+    session.commit()
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert 'title="Yesterday: 100.0 calories"' in response.text
+    assert 'week-bar week-bar-total has-value is-yesterday' in response.text
+    assert 'week-day is-yesterday' in response.text
+    assert '>Y</span>' in response.text
+    assert 'title="Today: 0 calories"' in response.text
+
+
+
+def test_log_picker_add_preserves_current_page_order_until_fresh_visit(client, session) -> None:
+    foods = [
+        create_food(
+            session,
+            FoodCreate(
+                canonical_name=name,
+                serving_description="1 serving",
+                grams_per_serving=1,
+                calories=100,
+                protein_g=10,
+                carbs_g=5,
+                fat_g=3,
+            ),
+        )
+        for name in ["Route Stable Alpha", "Route Stable Beta", "Route Stable Gamma"]
+    ]
+    initial = client.get("/log")
+    assert initial.status_code == 200
+    marker = 'name="picker_order" value="'
+    order_start = initial.text.index(marker) + len(marker)
+    order_end = initial.text.index('"', order_start)
+    picker_order = initial.text[order_start:order_end]
+    first_name = next(food.canonical_name for food in foods if str(food.id) == picker_order.split(",")[0])
+    logged_food = next(food for food in foods if str(food.id) == picker_order.split(",")[-1])
+
+    add_response = client.post(
+        "/log/picker/add",
+        data={
+            "food_id": str(logged_food.id),
+            "quantity": "1",
+            "unit": "serving",
+            "meal_label": "Breakfast",
+            "logged_at": datetime.now().isoformat(timespec="minutes"),
+            "q": "",
+            "source": "all",
+            "picker_order": picker_order,
+            "picker_scroll_y": "640",
+            "redirect_to": "/log",
+        },
+        follow_redirects=False,
+    )
+    assert add_response.status_code == 303
+    assert "picker_order=" in add_response.headers["location"]
+    assert "picker_scroll_y=640" in add_response.headers["location"]
+
+    stable_page = client.get(add_response.headers["location"])
+    assert 'name="picker_scroll_y" value="640"' in stable_page.text
+    fresh_page = client.get("/log")
+
+    assert stable_page.text.index(f'aria-label="Add {first_name}"') < stable_page.text.index(f'aria-label="Add {logged_food.canonical_name}"')
+    assert fresh_page.text.index(f'aria-label="Add {logged_food.canonical_name}"') < fresh_page.text.index(f'aria-label="Add {first_name}"')
+
+
+def test_log_picker_renders_native_serving_quantity_for_count_units(client, session) -> None:
+    create_food(
+        session,
+        FoodCreate(
+            canonical_name="MML Roasted Asparagus",
+            serving_description="10 spears",
+            grams_per_serving=1,
+            calories=110,
+            protein_g=3.5,
+            carbs_g=6,
+            fat_g=0.5,
+        ),
+    )
+
+    response = client.get("/log?q=asparagus&source=custom")
+
+    assert response.status_code == 200
+    assert 'data-native-serving-quantity="10.0"' in response.text
+    assert 'data-native-unit="spears"' in response.text
+    assert 'name="quantity" value="10.0"' in response.text
+    assert '<option value="spears" selected>spears</option>' in response.text
+
+
+def _picker_quantity_value_for_food(body: str, food_id: int) -> str:
+    form_start = body.index(f'name="food_id" value="{food_id}"')
+    marker = 'name="quantity" value="'
+    value_start = body.index(marker, form_start) + len(marker)
+    value_end = body.index('"', value_start)
+    return body[value_start:value_end]
+
+
+def test_log_picker_plus_keeps_submitted_quantity_after_merge(client, session) -> None:
+    food = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Repeat Plus Shake",
+            serving_description="1 serving",
+            grams_per_serving=50,
+            calories=100,
+            protein_g=10,
+            carbs_g=3,
+            fat_g=2,
+            fiber_g=1,
+            net_carbs_g=2,
+        ),
+    )
+    logged_at = datetime(2026, 5, 12, 8, 0).isoformat(timespec="minutes")
+
+    page = client.get("/log?q=Repeat+Plus&source=custom")
+    assert _picker_quantity_value_for_food(page.text, food.id) == "1.0"
+
+    for expected_quantity in [1.0, 2.0, 3.0]:
+        response = client.post(
+            "/log/picker/add",
+            data={
+                "food_id": str(food.id),
+                "quantity": _picker_quantity_value_for_food(page.text, food.id),
+                "unit": "serving",
+                "meal_label": "Breakfast",
+                "logged_at": logged_at,
+                "q": "Repeat Plus",
+                "source": "custom",
+                "redirect_to": "/log",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        page = client.get(response.headers["location"])
+        assert _picker_quantity_value_for_food(page.text, food.id) == "1.0"
+        item = session.query(MealEntryItem).filter_by(food_id=food.id, unit="serving").one()
+        assert item.quantity == expected_quantity
+
+
+def test_log_picker_add_merges_same_food_and_unit(client, session) -> None:
+    food = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Mergeable Picker Shake",
+            serving_description="1 serving",
+            grams_per_serving=50,
+            calories=100,
+            protein_g=10,
+            carbs_g=3,
+            fat_g=2,
+            fiber_g=1,
+            net_carbs_g=2,
+        ),
+    )
+    logged_at = datetime(2026, 5, 12, 8, 0).isoformat(timespec="minutes")
+
+    for quantity in ["1", "1", "3"]:
+        response = client.post(
+            "/log/picker/add",
+            data={
+                "food_id": str(food.id),
+                "quantity": quantity,
+                "unit": "serving",
+                "meal_label": "Breakfast",
+                "logged_at": logged_at,
+                "redirect_to": "/log",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+    items = session.query(MealEntryItem).all()
+    assert len(items) == 1
+    item = items[0]
+    assert item.quantity == 5.0
+    assert item.unit == "serving"
+    assert item.quantity_text == "5"
+    assert item.calories_snapshot == 500.0
+    assert item.protein_g_snapshot == 50.0
+    assert item.net_carbs_g_snapshot == 10.0
+
+    response = client.post(
+        "/log/picker/add",
+        data={
+            "food_id": str(food.id),
+            "quantity": "2",
+            "unit": "oz",
+            "meal_label": "Breakfast",
+            "logged_at": logged_at,
+            "redirect_to": "/log",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert session.query(MealEntryItem).count() == 2
+    serving_item = session.query(MealEntryItem).filter_by(food_id=food.id, unit="serving").one()
+    ounce_item = session.query(MealEntryItem).filter_by(food_id=food.id, unit="oz").one()
+    assert serving_item.quantity == 5.0
+    assert ounce_item.quantity == 2.0
 
 
 def test_dashboard_and_log_buttons_point_to_live_endpoints(client) -> None:
@@ -48,6 +544,53 @@ def test_dashboard_date_arrows_navigate_previous_and_next_days(client) -> None:
     assert target_day.isoformat() in response.text
     assert f'href="/?target_date={(target_day - timedelta(days=1)).isoformat()}&amp;metric=protein"' in response.text
     assert f'href="/?target_date={(target_day + timedelta(days=1)).isoformat()}&amp;metric=protein"' in response.text
+
+
+def test_daily_log_date_controls_navigate_previous_and_next_days(client) -> None:
+    target_day = date.today() + timedelta(days=2)
+
+    redirect = client.get(f"/daily?target_date={target_day.isoformat()}", follow_redirects=False)
+    assert redirect.status_code == 303
+    assert redirect.headers["location"] == f"/daily/{target_day.isoformat()}"
+
+    response = client.get(f"/daily/{target_day.isoformat()}")
+
+    assert response.status_code == 200
+    assert f'href="/daily/{(target_day - timedelta(days=1)).isoformat()}"' in response.text
+    assert f'href="/daily/{(target_day + timedelta(days=1)).isoformat()}"' in response.text
+    assert 'action="/daily"' in response.text
+    assert 'name="target_date"' in response.text
+    assert f'value="{target_day.isoformat()}"' in response.text
+    assert f'href="/log?target_date={target_day.isoformat()}"' in response.text
+
+
+def test_add_log_date_controls_navigate_previous_and_next_days(client) -> None:
+    target_day = date.today() + timedelta(days=2)
+    response = client.get(f"/log?target_date={target_day.isoformat()}&meal_label=Lunch&source=all&q=egg")
+
+    assert response.status_code == 200
+    assert f'href="/log?target_date={(target_day - timedelta(days=1)).isoformat()}&amp;meal_label=Lunch&amp;source=all&amp;q=egg"' in response.text
+    assert f'href="/log?target_date={(target_day + timedelta(days=1)).isoformat()}&amp;meal_label=Lunch&amp;source=all&amp;q=egg"' in response.text
+    assert 'action="/log"' in response.text
+    assert f'value="{target_day.isoformat()}"' in response.text
+    assert f'value="{target_day.isoformat()}T' in response.text
+
+
+def test_shared_layout_preserves_scroll_after_page_actions(client) -> None:
+    response = client.get(f"/daily/{date.today().isoformat()}")
+
+    assert response.status_code == 200
+    assert "mml-food-tracking:scroll-restore" in response.text
+    assert "const rememberFormScroll" in response.text
+    assert 'document.querySelectorAll("form")' in response.text
+    assert 'form.addEventListener("submit", () => rememberFormScroll(form))' in response.text
+    assert 'input[name="redirect_to"]' in response.text
+    assert "restorePageScroll();" in response.text
+    assert "rememberFormScroll(mealMoveForm);" in response.text
+
+    foods = client.get("/foods")
+    assert foods.status_code == 200
+    assert "mml-food-tracking:scroll-restore" in foods.text
 
 
 def test_dashboard_week_panel_renders_goal_based_axis_labels(client) -> None:
@@ -677,6 +1220,8 @@ def test_dashboard_exercise_save_supports_zone2_minutes(client, session) -> None
             "zone2_minutes": "42",
             "zone4_minutes": "12",
             "did_push_workout": "1",
+            "weight_lb": "211.6",
+            "body_fat_pct": "27.4",
         },
         follow_redirects=False,
     )
@@ -692,6 +1237,10 @@ def test_dashboard_exercise_save_supports_zone2_minutes(client, session) -> None
     assert checkin.zone4_minutes == 12
     assert checkin.did_push_workout is True
     assert checkin.did_pull_workout is False
+
+    measurement = session.query(HealthMeasurement).one()
+    assert measurement.weight_lb == 211.6
+    assert measurement.body_fat_pct == 27.4
 
 
 def test_review_submit_can_exclude_an_item_from_meal(client, session) -> None:

@@ -38,7 +38,7 @@
       <div class="facts-head"><span>Nutrient</span><span>Value</span></div>
       <div class="facts-row neutral"><span>Calories</span><strong>{{ food.calories if food else 0 }}</strong></div>
       <div class="facts-row coral"><span>Total Carbs</span><strong>{{ food.carbs_g if food else 0 }}g</strong></div>
-      <div class="facts-row"><span class="sub-item">Net Carbs</span><strong>{{ food.net_carbs_g if food and food.net_carbs_g is not none else 0 }}g</strong></div>
+      <div class="facts-row"><span class="sub-item">Net Carbs</span><strong>{{ food_net_carbs(food) if food else 0 }}g</strong></div>
       <div class="facts-row"><span class="sub-item">Fiber</span><strong>{{ food.fiber_g if food and food.fiber_g is not none else 0 }}g</strong></div>
       <div class="facts-row blue"><span>Protein</span><strong>{{ food.protein_g if food else 0 }}g</strong></div>
       <div class="facts-row gold"><span>Fat</span><strong>{{ food.fat_g if food else 0 }}g</strong></div>

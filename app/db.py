@@ -51,6 +51,15 @@ def _run_sqlite_compat_migrations() -> None:
                 connection.execute(text("ALTER TABLE foods ADD COLUMN image_data BLOB"))
             if "icon_key" not in food_columns:
                 connection.execute(text("ALTER TABLE foods ADD COLUMN icon_key VARCHAR(64)"))
+        if "health_measurements" in table_names:
+            health_measurement_columns = {column["name"] for column in inspector.get_columns("health_measurements")}
+            desired_columns = {
+                "weight_lb": "ALTER TABLE health_measurements ADD COLUMN weight_lb FLOAT",
+                "body_fat_pct": "ALTER TABLE health_measurements ADD COLUMN body_fat_pct FLOAT",
+            }
+            for column_name, ddl in desired_columns.items():
+                if column_name not in health_measurement_columns:
+                    connection.execute(text(ddl))
         if "exercise_checkins" in table_names:
             exercise_columns = {column["name"] for column in inspector.get_columns("exercise_checkins")}
             if "zone2_minutes" not in exercise_columns:

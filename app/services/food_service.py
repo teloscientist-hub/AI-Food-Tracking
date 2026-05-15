@@ -29,6 +29,61 @@ WEIGHT_UNIT_TO_GRAMS = {
 }
 
 
+def _quantity_from_match(match: re.Match[str]) -> float | None:
+    if match.group("mixed_whole"):
+        denominator = float(match.group("mixed_den"))
+        if denominator == 0:
+            return None
+        return float(match.group("mixed_whole")) + (float(match.group("mixed_num")) / denominator)
+    if match.group("frac_num"):
+        denominator = float(match.group("frac_den"))
+        if denominator == 0:
+            return None
+        return float(match.group("frac_num")) / denominator
+    return float(match.group("decimal"))
+
+
+def _unit_key(unit: str | None) -> str:
+    if not unit:
+        return ""
+    cleaned = re.sub(r"\s+", " ", unit.strip().lower())
+    if cleaned.endswith("ies"):
+        return f"{cleaned[:-3]}y"
+    if cleaned.endswith("s") and not cleaned.endswith("ss"):
+        return cleaned[:-1]
+    return cleaned
+
+
+def serving_description_amount_unit(serving_description: str | None) -> tuple[float, str] | None:
+    if not serving_description:
+        return None
+    match = re.match(
+        r"^\s*"
+        r"(?:"
+        r"(?P<mixed_whole>\d+)[-\s]+(?P<mixed_num>\d+)/(?P<mixed_den>\d+)"
+        r"|(?P<frac_num>\d+)/(?P<frac_den>\d+)"
+        r"|(?P<decimal>\d+(?:\.\d+)?)"
+        r")"
+        r"\s*(?P<unit>[a-z]+(?:\s+[a-z]+)?)\b",
+        serving_description,
+        flags=re.I,
+    )
+    if not match:
+        return None
+    quantity = _quantity_from_match(match)
+    if not quantity or quantity <= 0:
+        return None
+    unit = re.sub(r"\s+", " ", match.group("unit").strip().lower())
+    first_word = unit.split()[0]
+    if first_word in WEIGHT_UNIT_TO_GRAMS:
+        unit = first_word
+    return quantity, unit
+
+
+def serving_unit_matches(left: str | None, right: str | None) -> bool:
+    return bool(_unit_key(left)) and _unit_key(left) == _unit_key(right)
+
+
 def serving_description_grams(serving_description: str | None) -> float | None:
     if not serving_description:
         return None
@@ -45,18 +100,9 @@ def serving_description_grams(serving_description: str | None) -> float | None:
     )
     if not match:
         return None
-    if match.group("mixed_whole"):
-        denominator = float(match.group("mixed_den"))
-        if denominator == 0:
-            return None
-        amount = float(match.group("mixed_whole")) + (float(match.group("mixed_num")) / denominator)
-    elif match.group("frac_num"):
-        denominator = float(match.group("frac_den"))
-        if denominator == 0:
-            return None
-        amount = float(match.group("frac_num")) / denominator
-    else:
-        amount = float(match.group("decimal"))
+    amount = _quantity_from_match(match)
+    if amount is None:
+        return None
     unit = match.group("unit").lower()
     return round(amount * WEIGHT_UNIT_TO_GRAMS[unit], 4)
 
@@ -288,11 +334,17 @@ def search_foods(session: Session, query: str | None = None, source: str | None 
     return session.scalars(stmt.order_by(Food.source, Food.canonical_name)).all()
 
 
-def get_picker_foods(session: Session, query: str | None = None, source: str | None = None) -> list[dict]:
+def get_picker_foods(
+    session: Session,
+    query: str | None = None,
+    source: str | None = None,
+    stable_order: Sequence[int] | None = None,
+) -> list[dict]:
     foods = search_foods(session, query, source)
     recent_map = _recent_log_map(session)
     if query:
-        return [_picker_card(session, food, recent_map.get(food.id)) for food in foods]
+        cards = [_picker_card(session, food, recent_map.get(food.id)) for food in foods]
+        return _apply_picker_stable_order(cards, stable_order)
 
     newest_meal_created_at = _newest_meal_entry_created_at(session)
 
@@ -306,7 +358,22 @@ def get_picker_foods(session: Session, query: str | None = None, source: str | N
         return (2, -food_activity, food.canonical_name.lower())
 
     ordered_foods = sorted(foods, key=picker_sort_key)
-    return [_picker_card(session, food, recent_map.get(food.id)) for food in ordered_foods]
+    cards = [_picker_card(session, food, recent_map.get(food.id)) for food in ordered_foods]
+    return _apply_picker_stable_order(cards, stable_order)
+
+
+def _apply_picker_stable_order(cards: list[dict], stable_order: Sequence[int] | None) -> list[dict]:
+    if not stable_order:
+        return cards
+    by_food_id = {card["food"].id: card for card in cards}
+    ordered: list[dict] = []
+    seen: set[int] = set()
+    for food_id in stable_order:
+        if food_id in by_food_id and food_id not in seen:
+            ordered.append(by_food_id[food_id])
+            seen.add(food_id)
+    ordered.extend(card for card in cards if card["food"].id not in seen)
+    return ordered
 
 
 def get_food_library_cards(
@@ -400,19 +467,32 @@ def _food_log_stats_map(session: Session) -> dict[int, dict]:
     }
 
 
+def _format_quantity(value: float) -> str:
+    return f"{value:g}"
+
+
 def _picker_card(session: Session, food: Food, recent_entry: tuple[MealEntryItem, object] | None) -> dict:
     food_read = food_to_read(session, food)
-    native_unit = _native_serving_unit(food.serving_description)
+    serving_measure = serving_description_amount_unit(food.serving_description)
+    native_quantity = serving_measure[0] if serving_measure else 1.0
+    native_unit = serving_measure[1] if serving_measure else _native_serving_unit(food.serving_description)
     if recent_entry:
         meal_item, logged_at = recent_entry
-        quick_quantity = meal_item.quantity
-        quick_unit = meal_item.unit or native_unit
-        quick_label = f"{meal_item.quantity:g} {meal_item.unit}".strip() if meal_item.unit else f"{meal_item.quantity:g} {food.serving_description}"
+        if meal_item.unit:
+            quick_quantity = meal_item.quantity
+            quick_unit = meal_item.unit
+        elif native_unit:
+            quick_quantity = meal_item.quantity * native_quantity
+            quick_unit = native_unit
+        else:
+            quick_quantity = meal_item.quantity
+            quick_unit = None
+        quick_label = f"{_format_quantity(quick_quantity)} {quick_unit}".strip() if quick_unit else f"{_format_quantity(meal_item.quantity)} {food.serving_description}"
         last_logged_at = logged_at
     else:
-        quick_quantity = 1.0
+        quick_quantity = native_quantity if native_unit else 1.0
         quick_unit = native_unit
-        quick_label = f"1 {food.serving_description}"
+        quick_label = f"{_format_quantity(quick_quantity)} {quick_unit}".strip() if quick_unit else f"1 {food.serving_description}"
         last_logged_at = None
     unit_options = _picker_unit_options(native_unit, quick_unit)
     return {
@@ -421,12 +501,16 @@ def _picker_card(session: Session, food: Food, recent_entry: tuple[MealEntryItem
         "quick_unit": quick_unit,
         "quick_label": quick_label,
         "last_logged_at": last_logged_at,
+        "native_quantity": native_quantity,
         "native_unit": native_unit,
         "unit_options": unit_options,
     }
 
 
 def _native_serving_unit(serving_description: str | None) -> str | None:
+    serving_measure = serving_description_amount_unit(serving_description)
+    if serving_measure:
+        return serving_measure[1]
     if not serving_description:
         return None
     text = serving_description.strip().lower()

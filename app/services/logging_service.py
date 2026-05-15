@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.models import Food, FoodAlias, FoodResolutionHistory, MealEntry, MealEntryItem
 from app.schemas.logging import LogMealRequest
-from app.services.food_service import _source_payload_image_url, create_food
+from app.services.food_service import _source_payload_image_url, create_food, serving_description_amount_unit, serving_unit_matches
+from app.services.nutrition import derive_net_carbs
 from app.services.parser import ParsedFoodItem, parse_entry, normalize_text
 from app.services.resolution import FoodResolver, ResolutionResult
 from app.schemas.foods import FoodCreate
@@ -43,6 +44,11 @@ def serving_multiplier(quantity: float, unit: str | None, food: Food) -> float:
     if normalized in UNIT_TO_GRAMS and food.grams_per_serving and food.grams_per_serving > 0:
         grams = quantity * UNIT_TO_GRAMS[normalized]
         return grams / food.grams_per_serving
+    serving_measure = serving_description_amount_unit(food.serving_description)
+    if serving_measure and serving_unit_matches(normalized, serving_measure[1]):
+        serving_quantity, _ = serving_measure
+        if serving_quantity > 0:
+            return quantity / serving_quantity
     return quantity
 
 
@@ -158,6 +164,17 @@ class LoggingService:
             if not food:
                 raise ValueError(f"Food {item.selected_food_id} not found")
             multiplier = serving_multiplier(item.quantity, item.unit, food)
+            grams_snapshot = multiply_value(food.grams_per_serving, multiplier)
+            calories_snapshot = multiply_value(food.calories, multiplier) or 0.0
+            protein_snapshot = multiply_value(food.protein_g, multiplier) or 0.0
+            carbs_snapshot = multiply_value(food.carbs_g, multiplier) or 0.0
+            fat_snapshot = multiply_value(food.fat_g, multiplier) or 0.0
+            fiber_snapshot = multiply_value(food.fiber_g, multiplier)
+            net_carbs_snapshot = derive_net_carbs(
+                carbs_snapshot,
+                fiber_snapshot,
+                multiply_value(food.net_carbs_g, multiplier),
+            )
 
             meal_item = MealEntryItem(
                 meal_entry_id=meal_entry.id,
@@ -173,13 +190,13 @@ class LoggingService:
                 resolved_food_name=food.canonical_name,
                 resolved_source=food.source,
                 serving_description_snapshot=food.serving_description,
-                grams_per_serving_snapshot=multiply_value(food.grams_per_serving, multiplier),
-                calories_snapshot=multiply_value(food.calories, multiplier) or 0.0,
-                protein_g_snapshot=multiply_value(food.protein_g, multiplier) or 0.0,
-                carbs_g_snapshot=multiply_value(food.carbs_g, multiplier) or 0.0,
-                fat_g_snapshot=multiply_value(food.fat_g, multiplier) or 0.0,
-                fiber_g_snapshot=multiply_value(food.fiber_g, multiplier),
-                net_carbs_g_snapshot=multiply_value(food.net_carbs_g, multiplier),
+                grams_per_serving_snapshot=grams_snapshot,
+                calories_snapshot=calories_snapshot,
+                protein_g_snapshot=protein_snapshot,
+                carbs_g_snapshot=carbs_snapshot,
+                fat_g_snapshot=fat_snapshot,
+                fiber_g_snapshot=fiber_snapshot,
+                net_carbs_g_snapshot=net_carbs_snapshot,
             )
             session.add(meal_item)
             session.add(

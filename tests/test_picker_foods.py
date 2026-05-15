@@ -81,6 +81,74 @@ def test_picker_foods_prefers_recent_logged_foods_and_last_amount(session) -> No
     assert cards[2]["unit_options"][0]["value"] == "tbsp"
 
 
+def test_picker_foods_uses_native_serving_quantity_for_count_units(session) -> None:
+    asparagus = create_food(
+        session,
+        FoodCreate(
+            canonical_name="MML Roasted Asparagus",
+            serving_description="10 spears",
+            grams_per_serving=1,
+            calories=110,
+            protein_g=3.5,
+            carbs_g=6,
+            fat_g=0.5,
+        ),
+    )
+
+    cards = get_picker_foods(session, query="asparagus")
+
+    assert cards[0]["food"].id == asparagus.id
+    assert cards[0]["quick_quantity"] == 10.0
+    assert cards[0]["quick_unit"] == "spears"
+    assert cards[0]["native_quantity"] == 10.0
+    assert cards[0]["native_unit"] == "spears"
+    assert cards[0]["unit_options"][0]["value"] == "spears"
+
+
+def test_picker_foods_can_hold_page_order_after_logging_from_picker(session) -> None:
+    foods = [
+        create_food(
+            session,
+            FoodCreate(
+                canonical_name=name,
+                serving_description="1 serving",
+                grams_per_serving=1,
+                calories=100,
+                protein_g=10,
+                carbs_g=5,
+                fat_g=3,
+            ),
+        )
+        for name in ["Stable Alpha", "Stable Beta", "Stable Gamma"]
+    ]
+    initial_cards = get_picker_foods(session)
+    stable_order = [card["food"].id for card in initial_cards]
+    logged_food_id = stable_order[-1]
+
+    entry = MealEntry(raw_input_text="stable picker add", meal_label="Breakfast", logged_at=datetime.now(UTC))
+    session.add(entry)
+    session.flush()
+    session.add(
+        MealEntryItem(
+            meal_entry_id=entry.id,
+            food_id=logged_food_id,
+            parsed_phrase="stable picker add",
+            normalized_phrase="stable picker add",
+            quantity=2.0,
+            unit="serving",
+        )
+    )
+    session.commit()
+
+    resorted_cards = get_picker_foods(session)
+    stable_cards = get_picker_foods(session, stable_order=stable_order)
+
+    assert foods
+    assert resorted_cards[0]["food"].id == logged_food_id
+    assert [card["food"].id for card in stable_cards] == stable_order
+    assert stable_cards[-1]["quick_quantity"] == 2.0
+
+
 def test_picker_foods_exposes_image_url_from_source_payload(session) -> None:
     food = create_food(
         session,

@@ -99,7 +99,9 @@
           method="post"
           class="picker-inline-add-form picker-row-form js-picker-row-form"
           data-grams-per-serving="{{ food.grams_per_serving or 0 }}"
-          data-base-net-carbs="{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}"
+          data-native-serving-quantity="{{ item.native_quantity or 0 }}"
+          data-native-unit="{{ item.native_unit or '' }}"
+          data-base-net-carbs="{{ food_net_carbs(food) }}"
           data-base-protein="{{ food.protein_g }}"
           data-base-fat="{{ food.fat_g }}"
           data-base-calories="{{ food.calories }}"
@@ -109,6 +111,8 @@
           <input type="hidden" name="logged_at" value="{{ logged_at }}">
           <input type="hidden" name="q" value="{{ q }}">
           <input type="hidden" name="source" value="{{ source }}">
+        <input type="hidden" name="picker_order" value="{{ picker_order }}">
+        <input type="hidden" name="picker_scroll_y" value="{{ picker_scroll_y }}">
           <input type="hidden" name="redirect_to" value="/log">
           <div class="picker-thumb">
             {% if food.image_url %}
@@ -141,7 +145,7 @@
             <div class="picker-macros compact-macros">
               <div class="picker-macro-cell">
                 <small>Net Carbs</small>
-                <span class="coral-text js-picker-net-carbs">{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}g</span>
+                <span class="coral-text js-picker-net-carbs">{{ food_net_carbs(food) }}g</span>
               </div>
               <div class="picker-macro-cell">
                 <small>Protein</small>

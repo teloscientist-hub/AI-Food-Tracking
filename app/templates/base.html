@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title or "MML Food Tracking" }}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='app-icon.svg') }}">
-  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v=20260501a">
+  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v=20260512f">
 </head>
 <body>
   <div class="page-shell">
@@ -37,6 +37,135 @@
     const roundPickerValue = (value) => Math.round(value * 100) / 100;
     const formatPickerMacro = (value) => `${roundPickerValue(value).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1")}g`;
     const formatPickerCalories = (value) => roundPickerValue(value).toFixed(1).replace(/\.0$/, ".0");
+    const normalizePickerUnit = (value) => {
+      const cleaned = String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+      if (cleaned.endsWith("ies")) {
+        return `${cleaned.slice(0, -3)}y`;
+      }
+      if (cleaned.endsWith("s") && !cleaned.endsWith("ss")) {
+        return cleaned.slice(0, -1);
+      }
+      return cleaned;
+    };
+
+    const MML_SCROLL_RESTORE_KEY = "mml-food-tracking:scroll-restore";
+
+    const currentScrollPosition = () => {
+      const contentScroller = document.querySelector(".content");
+      const contentScrollX = contentScroller instanceof HTMLElement ? contentScroller.scrollLeft : 0;
+      const contentScrollY = contentScroller instanceof HTMLElement ? contentScroller.scrollTop : 0;
+      return {
+        x: Math.max(0, Math.round(window.scrollX || document.documentElement.scrollLeft || contentScrollX || 0)),
+        y: Math.max(0, Math.round(window.scrollY || document.documentElement.scrollTop || contentScrollY || 0)),
+      };
+    };
+
+    const pathFromUrl = (value) => {
+      try {
+        return new URL(value || window.location.href, window.location.href).pathname;
+      } catch (error) {
+        return window.location.pathname;
+      }
+    };
+
+    const rememberPageScroll = (candidatePaths) => {
+      if (!window.sessionStorage) {
+        return;
+      }
+      const position = currentScrollPosition();
+      const paths = Array.from(new Set([window.location.pathname, ...candidatePaths].filter(Boolean)));
+      try {
+        window.sessionStorage.setItem(
+          MML_SCROLL_RESTORE_KEY,
+          JSON.stringify({
+            ...position,
+            paths,
+            createdAt: Date.now(),
+          })
+        );
+      } catch (error) {
+        // If private browsing or storage limits block this, form submissions should continue normally.
+      }
+    };
+
+    const rememberFormScroll = (form) => {
+      if (!(form instanceof HTMLFormElement) || form.dataset.preserveScroll === "false") {
+        return;
+      }
+      const method = (form.getAttribute("method") || "get").toLowerCase();
+      const candidatePaths = [];
+      const redirectInput = form.querySelector('input[name="redirect_to"]');
+      if (redirectInput instanceof HTMLInputElement && redirectInput.value.trim()) {
+        candidatePaths.push(pathFromUrl(redirectInput.value));
+      }
+      if (method === "get" || candidatePaths.length === 0) {
+        candidatePaths.push(pathFromUrl(form.getAttribute("action") || window.location.href));
+      }
+      rememberPageScroll(candidatePaths);
+    };
+
+    const restorePageScroll = () => {
+      if (!window.sessionStorage) {
+        return;
+      }
+      let payload = null;
+      try {
+        payload = JSON.parse(window.sessionStorage.getItem(MML_SCROLL_RESTORE_KEY) || "null");
+      } catch (error) {
+        window.sessionStorage.removeItem(MML_SCROLL_RESTORE_KEY);
+        return;
+      }
+      if (!payload || Date.now() - Number(payload.createdAt || 0) > 15000) {
+        window.sessionStorage.removeItem(MML_SCROLL_RESTORE_KEY);
+        return;
+      }
+      if (!Array.isArray(payload.paths) || !payload.paths.includes(window.location.pathname)) {
+        return;
+      }
+      const scrollX = Math.max(0, Number(payload.x) || 0);
+      const scrollY = Math.max(0, Number(payload.y) || 0);
+      const applyScroll = () => {
+        const contentScroller = document.querySelector(".content");
+        if (contentScroller instanceof HTMLElement) {
+          contentScroller.scrollLeft = scrollX;
+          contentScroller.scrollTop = scrollY;
+        }
+        window.scrollTo(scrollX, scrollY);
+      };
+      requestAnimationFrame(applyScroll);
+      setTimeout(applyScroll, 80);
+      setTimeout(() => {
+        applyScroll();
+        window.sessionStorage.removeItem(MML_SCROLL_RESTORE_KEY);
+      }, 240);
+    };
+
+    document.querySelectorAll("form").forEach((form) => {
+      form.addEventListener("submit", () => rememberFormScroll(form));
+    });
+
+    document.addEventListener("click", (event) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      const link = target.closest("a[href]");
+      if (!(link instanceof HTMLAnchorElement) || link.target || link.hasAttribute("download")) {
+        return;
+      }
+      let url;
+      try {
+        url = new URL(link.href, window.location.href);
+      } catch (error) {
+        return;
+      }
+      if (url.origin === window.location.origin && url.pathname === window.location.pathname) {
+        rememberPageScroll([url.pathname]);
+      }
+    });
 
     const updatePickerRowPreview = (form) => {
       if (!(form instanceof HTMLFormElement)) {
@@ -62,9 +191,13 @@
       const quantity = Math.max(parseFloat(quantityInput.value || "0") || 0, 0);
       const unit = (unitSelect.value || "").toLowerCase();
       const gramsPerServing = parseFloat(form.dataset.gramsPerServing || "0") || 0;
+      const nativeServingQuantity = parseFloat(form.dataset.nativeServingQuantity || "0") || 0;
+      const nativeUnit = form.dataset.nativeUnit || "";
       let multiplier = quantity;
       if (unit in PICKER_UNIT_TO_GRAMS && gramsPerServing > 0) {
         multiplier = (quantity * PICKER_UNIT_TO_GRAMS[unit]) / gramsPerServing;
+      } else if (nativeServingQuantity > 0 && normalizePickerUnit(unit) === normalizePickerUnit(nativeUnit)) {
+        multiplier = quantity / nativeServingQuantity;
       }
 
       const baseNetCarbs = parseFloat(form.dataset.baseNetCarbs || "0") || 0;
@@ -78,6 +211,19 @@
       caloriesNode.textContent = formatPickerCalories(baseCalories * multiplier);
     };
 
+    const restorePickerScroll = () => {
+      const params = new URLSearchParams(window.location.search);
+      const rawScrollY = params.get("picker_scroll_y");
+      if (!rawScrollY || !params.has("saved")) {
+        return;
+      }
+      const scrollY = Number.parseInt(rawScrollY, 10);
+      if (!Number.isFinite(scrollY) || scrollY < 0) {
+        return;
+      }
+      requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    };
+
     document.querySelectorAll(".js-picker-row-form").forEach((form) => {
       const quantityInput = form.querySelector('input[name="quantity"]');
       const unitSelect = form.querySelector('select[name="unit"]');
@@ -85,7 +231,15 @@
       quantityInput?.addEventListener("input", () => updatePickerRowPreview(form));
       quantityInput?.addEventListener("change", () => updatePickerRowPreview(form));
       unitSelect?.addEventListener("change", () => updatePickerRowPreview(form));
+      form.addEventListener("submit", () => {
+        const scrollInput = form.querySelector('input[name="picker_scroll_y"]');
+        if (scrollInput instanceof HTMLInputElement) {
+          scrollInput.value = String(Math.max(0, Math.round(window.scrollY || document.documentElement.scrollTop || 0)));
+        }
+      });
     });
+    restorePageScroll();
+    restorePickerScroll();
 
     document.querySelectorAll(".row-overflow-menu > .row-overflow-trigger").forEach((summary) => {
       if (summary.classList.contains("meal-overflow-trigger")) {
@@ -322,6 +476,7 @@
           mealMoveRedirect.value = window.location.pathname + window.location.search;
         }
         mealMoveForm.action = `/meal-items/${itemId}/move`;
+        rememberFormScroll(mealMoveForm);
         mealMoveForm.submit();
       });
     });

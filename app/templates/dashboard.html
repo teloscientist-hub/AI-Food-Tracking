@@ -18,7 +18,13 @@
       <a class="mini-link" href="/daily/{{ daily.date }}">Actual</a>
     </div>
     <div class="macro-card-layout">
-      <div class="macro-bubble macro-bubble-pie"></div>
+      <div
+        class="macro-bubble macro-bubble-pie"
+        role="img"
+        aria-label="Macro calorie ratio: Net Carbs {{ macro_pie.net_carbs_percent }}%, Protein {{ macro_pie.protein_percent }}%, Fat {{ macro_pie.fat_percent }}%"
+        title="Macro calorie ratio: Net Carbs {{ macro_pie.net_carbs_percent }}%, Protein {{ macro_pie.protein_percent }}%, Fat {{ macro_pie.fat_percent }}%"
+        style="--macro-net-carbs-stop: {{ macro_pie.net_carbs_stop }}%; --macro-protein-stop: {{ macro_pie.protein_stop }}%; --macro-fat-stop: {{ macro_pie.fat_stop }}%;"
+      ></div>
       <div class="macro-rows">
         {% for key, label, dot in [("protein","Protein","blue"),("fat","Fat","gold"),("net_carbs","Net Carbs","coral")] %}
         <div class="macro-row">
@@ -63,17 +69,28 @@
       <span class="mini-link">Today</span>
     </div>
     <div class="goal-ring-stack">
-      {% for ring in goal_rings %}
-      <div class="goal-ring layer-{{ loop.index }}" style="--ring-color: {{ ring.color }}; --ring-percent: {{ ring.percent }}%;">
-        {% if loop.first %}
-        <div class="goal-ring-center">
-          <strong>{{ daily.calories.consumed }}</strong>
-          <span>/{{ daily.calories.target or 0 }}</span>
-          <small>Calories</small>
-        </div>
-        {% endif %}
+      <svg class="goal-ring-svg" viewBox="0 0 220 220" role="img" aria-label="Daily goal progress rings">
+        {% for ring in goal_rings %}
+        <g class="goal-ring-layer" data-goal-ring="{{ ring.label }}">
+          <title>{{ ring.label }} {{ ring.total_percent }}% of goal</title>
+          <circle class="goal-ring-track" cx="110" cy="110" r="{{ ring.radius }}" pathLength="100"></circle>
+          {% for segment in ring.base_segments %}
+          <circle class="goal-ring-progress goal-ring-segment goal-ring-base" cx="110" cy="110" r="{{ ring.radius }}" pathLength="100" stroke="{{ segment.color }}" stroke-dasharray="{{ segment.length }} 100" stroke-dashoffset="-{{ segment.start }}" transform="rotate(-90 110 110)"></circle>
+          {% endfor %}
+          {% for segment in ring.over_segments %}
+          <circle class="goal-ring-progress goal-ring-segment goal-ring-over" cx="110" cy="110" r="{{ ring.radius }}" pathLength="100" stroke="{{ segment.color }}" stroke-dasharray="{{ segment.length }} 100" stroke-dashoffset="-{{ segment.start }}" transform="rotate(-90 110 110)"></circle>
+          {% endfor %}
+          {% if ring.cap %}
+          <circle class="goal-ring-cap" cx="{{ ring.cap.x }}" cy="{{ ring.cap.y }}" r="6.8" fill="{{ ring.cap.color }}"></circle>
+          {% endif %}
+        </g>
+        {% endfor %}
+      </svg>
+      <div class="goal-ring-center">
+        <strong>{{ daily.calories.consumed }}</strong>
+        <span>/{{ daily.calories.target or 0 }}</span>
+        <small>Calories</small>
       </div>
-      {% endfor %}
     </div>
     <div class="goal-legend">
       {% for key, label, dot in [("net_carbs","Net Carbs","coral"),("protein","Protein","blue"),("fat","Fat","gold")] %}
@@ -123,22 +140,45 @@
       {{ daily.net_carbs.consumed if daily.net_carbs else 0 }}g
       {% endif %}
     </div>
-    <div class="week-chart">
+    <div class="week-chart metric-{{ metric }}">
       <div class="week-axis">
         {% for label in week_axis.labels %}
         <span>{{ label|round(0)|int if label == (label|round(0)) else label }}</span>
         {% endfor %}
       </div>
       <div class="week-plot">
-      {% for day in weekly.days %}
-      {% set value = day[weekly_metric_key] %}
-      <div class="week-col">
-        <div class="week-bar-track">
-          <span class="week-bar {% if loop.last %}is-today{% endif %}" style="height: {{ ((value / week_axis.max) * 100) if week_axis.max else 0 }}%"></span>
+        <div class="week-bars">
+          {% if week_axis.target %}
+          <div class="week-goal-line" style="--week-goal-position: {{ week_axis.target_percent }}%;">
+            <span>{{ week_axis.target_label }}</span>
+          </div>
+          {% endif %}
+          {% for day in weekly.days %}
+          {% set value = day[weekly_metric_key] %}
+          {% set over_value = 0 %}
+          {% if week_axis.target %}
+          {% set over_value = value - week_axis.target if value > week_axis.target else 0 %}
+          {% endif %}
+          <div class="week-bar-cell" title="{{ day.label }}: {{ value }}{% if metric != 'calories' %}g{% else %} calories{% endif %}">
+            {% if value > 0 and (day.is_selected or over_value > 0) %}
+            <span class="week-bar-value" style="bottom: {{ ((value / week_axis.max) * 100) if week_axis.max else 0 }}%">
+              {{ "{:,.0f}".format(value) if value == (value|round(0)) else "{:,.1f}".format(value) }}{% if metric != 'calories' %}g{% endif %}
+            </span>
+            {% endif %}
+            <div class="week-bar-track {% if over_value > 0 %}is-over-goal{% endif %} {% if day.is_yesterday %}is-yesterday{% endif %} {% if day.is_selected %}is-selected{% endif %}">
+              <span class="week-bar week-bar-total {% if value > 0 %}has-value{% endif %} {% if day.is_yesterday %}is-yesterday{% endif %} {% if day.is_selected %}is-selected{% endif %}" style="height: {{ ((value / week_axis.max) * 100) if week_axis.max else 0 }}%"></span>
+              {% if week_axis.target and over_value > 0 %}
+              <span class="week-bar week-bar-over has-value {% if day.is_yesterday %}is-yesterday{% endif %} {% if day.is_selected %}is-selected{% endif %}" style="height: {{ ((over_value / week_axis.max) * 100) if week_axis.max else 0 }}%; bottom: {{ week_axis.target_percent }}%"></span>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
         </div>
-        <span class="week-day">{{ day.day[0] }}</span>
-      </div>
-      {% endfor %}
+        <div class="week-day-row">
+          {% for day in weekly.days %}
+          <span class="week-day {% if day.is_yesterday %}is-yesterday{% endif %} {% if day.is_today %}is-today{% endif %}">{{ day.short_label }}</span>
+          {% endfor %}
+        </div>
       </div>
     </div>
     <a class="button outline full" href="/weekly">Weekly Summary</a>
@@ -208,7 +248,23 @@
           <span>Pull Workout</span>
         </label>
       </div>
-      <button class="button secondary" type="submit">Save exercise</button>
+      <div class="body-checkin-section">
+        <div class="section-mini-header">
+          <h4>Weigh-In</h4>
+          <span class="mini-link">Daily</span>
+        </div>
+        <div class="form-grid compact-grid body-checkin-grid">
+          <label>
+            <span>Weight Pounds</span>
+            <input type="number" name="weight_lb" min="0" step="0.1" value="{{ health_measurement.weight_lb if health_measurement.weight_lb is not none else '' }}">
+          </label>
+          <label>
+            <span>Body Fat %</span>
+            <input type="number" name="body_fat_pct" min="0" max="100" step="0.1" value="{{ health_measurement.body_fat_pct if health_measurement.body_fat_pct is not none else '' }}">
+          </label>
+        </div>
+      </div>
+      <button class="button secondary" type="submit">Save check-in</button>
     </form>
   </aside>
 
@@ -237,8 +293,9 @@
           <div class="meal-row">
             <button class="meal-drag-handle" type="button" draggable="true" data-item-id="{{ item.id }}" aria-label="Move item">⋮⋮</button>
             <div class="picker-thumb meal-thumb">
-              {% if item.food and item.food.image_url %}
-              <img src="{{ item.food.image_url }}" alt="{{ item.resolved_food_name or item.parsed_phrase }}">
+              {% set meal_image_url = food_image_url(item.food) if item.food else none %}
+              {% if meal_image_url %}
+              <img src="{{ meal_image_url }}" alt="{{ item.resolved_food_name or item.parsed_phrase }}">
               {% elif item.food and item.food.icon_key %}
               <span class="food-icon-symbol">{{ food_icon_symbol(item.food.icon_key) }}</span>
               {% else %}
@@ -256,7 +313,7 @@
             <div class="meal-item-macros">
               <div class="picker-macro-cell">
                 <small>Net Carbs</small>
-                <span class="coral-text">{{ item.net_carbs_g_snapshot if item.net_carbs_g_snapshot is not none else item.carbs_g_snapshot }}g</span>
+                <span class="coral-text">{{ item_net_carbs(item) }}g</span>
               </div>
               <div class="picker-macro-cell">
                 <small>Protein</small>

@@ -56,7 +56,7 @@
       <div class="facts-head"><span>Nutrient</span><span>Value</span></div>
       <div class="facts-row neutral"><span>Calories</span><strong>{{ food.calories }}</strong></div>
       <div class="facts-row coral"><span>Total Carbs</span><strong>{{ food.carbs_g }}g</strong></div>
-      <div class="facts-row"><span class="sub-item">Net Carbs</span><strong>{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}g</strong></div>
+      <div class="facts-row"><span class="sub-item">Net Carbs</span><strong>{{ food_net_carbs(food) }}g</strong></div>
       <div class="facts-row"><span class="sub-item">Fiber</span><strong>{{ food.fiber_g if food.fiber_g is not none else 0 }}g</strong></div>
       <div class="facts-row blue"><span>Protein</span><strong>{{ food.protein_g }}g</strong></div>
       <div class="facts-row gold"><span>Fat</span><strong>{{ food.fat_g }}g</strong></div>
@@ -76,7 +76,7 @@
     <div class="quick-add-card">
       <div class="quick-add-summary">
         <div class="quick-add-bars">
-          <div class="quick-add-row"><span class="dot coral"></span><span>Net Carbs</span><strong>{{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}g</strong></div>
+          <div class="quick-add-row"><span class="dot coral"></span><span>Net Carbs</span><strong>{{ food_net_carbs(food) }}g</strong></div>
           <div class="bar soft"><span style="width: 100%"></span></div>
           <div class="quick-add-row"><span class="dot blue"></span><span>Protein</span><strong>{{ food.protein_g }}g</strong></div>
           <div class="bar soft"><span style="width: 100%"></span></div>
@@ -85,7 +85,7 @@
           <div class="quick-add-row"><span class="dot gray"></span><span>Calories</span><strong>{{ food.calories }}</strong></div>
           <div class="bar soft"><span style="width: 100%"></span></div>
         </div>
-        <div class="macro-donut" style="--donut-a: {{ food.net_carbs_g if food.net_carbs_g is not none else food.carbs_g }}; --donut-b: {{ food.protein_g }}; --donut-c: {{ food.fat_g }};">
+        <div class="macro-donut" style="--donut-a: {{ food_net_carbs(food) }}; --donut-b: {{ food.protein_g }}; --donut-c: {{ food.fat_g }};">
           <div class="macro-donut-core">
             <strong>{{ food.calories }}</strong>
             <span>Calories</span>
@@ -99,7 +99,7 @@
         <div class="form-grid">
           <label>
             <span>Quantity</span>
-            <input type="number" name="quantity" step="0.001" min="0.001" value="1">
+            <input type="number" name="quantity" step="0.001" min="0.001" value="{{ native_quantity }}">
           </label>
           <label>
             <span>Units</span>

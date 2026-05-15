@@ -122,7 +122,7 @@
       <section class="panel settings-panel">
         <div class="panel-header">
           <h3>Macro Summary</h3>
-          <span class="mini-link">4 / 9 / 4 rule</span>
+          <span class="mini-link">4 / 9 / 5 net</span>
         </div>
         <div class="settings-calc">
           <div class="settings-calc-row">
@@ -134,18 +134,14 @@
             <strong id="fat_cals">{{ settings.fat_target_g * 9 }}</strong>
           </div>
           <div class="settings-calc-row">
-            <span>Total carbs</span>
-            <strong><span id="total_carbs_g">{{ settings.carbs_target_g }}</span>g</strong>
-          </div>
-          <div class="settings-calc-row">
             <span>Carb calories</span>
-            <strong id="carb_cals">{{ settings.carbs_target_g * 4 }}</strong>
+            <strong id="carb_cals">{{ settings.net_carbs_target_g * 5 }}</strong>
           </div>
           <div class="settings-calc-total">
             <span>Calculated calories from macros</span>
             <strong id="calculated_calories">{{ settings.calculated_calories }}</strong>
           </div>
-          <p class="subtle">Total carbs are calculated as <strong>net carbs + fiber</strong>. Save whatever calorie target you want to use on the left.</p>
+          <p class="subtle">Carb calories use <strong>net carbs x 5</strong>. Save whatever calorie target you want to use on the left.</p>
         </div>
       </section>
 
@@ -278,7 +274,6 @@
 
     const proteinCals = document.getElementById("protein_cals");
     const fatCals = document.getElementById("fat_cals");
-    const totalCarbsG = document.getElementById("total_carbs_g");
     const carbCals = document.getElementById("carb_cals");
     const calculatedCalories = document.getElementById("calculated_calories");
 
@@ -327,16 +322,13 @@
       const protein = readNumber(proteinInput);
       const fat = readNumber(fatInput);
       const netCarbs = readNumber(netCarbsInput);
-      const fiber = readNumber(fiberInput);
-      const totalCarbs = netCarbs + fiber;
       const proteinCalories = protein * 4;
       const fatCalories = fat * 9;
-      const carbsCalories = totalCarbs * 4;
+      const carbsCalories = netCarbs * 5;
       const totalCalories = proteinCalories + fatCalories + carbsCalories;
 
       proteinCals.textContent = proteinCalories.toFixed(1);
       fatCals.textContent = fatCalories.toFixed(1);
-      totalCarbsG.textContent = totalCarbs.toFixed(1);
       carbCals.textContent = carbsCalories.toFixed(1);
       calculatedCalories.textContent = totalCalories.toFixed(1);
 
@@ -344,7 +336,7 @@
       fatLive.textContent = fat.toFixed(0);
       netCarbsLive.textContent = netCarbs.toFixed(0);
 
-      const trackedCalories = proteinCalories + fatCalories + (netCarbs * 4);
+      const trackedCalories = proteinCalories + fatCalories + carbsCalories;
       const targetCalories = readNumber(caloriesInput) || totalCalories || 1;
       ratioPercentDisplay.textContent = `${Math.round((trackedCalories / targetCalories) * 100)}%`;
 

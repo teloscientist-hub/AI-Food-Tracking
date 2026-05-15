@@ -44,7 +44,7 @@
           name="target_date"
           value="{{ selected_date or page_date }}"
           class="dashboard-date-input"
-          onchange="this.form.submit()"
+          onchange="if (this.form.requestSubmit) { this.form.requestSubmit(); } else { this.form.submit(); }"
           aria-label="Choose date"
         >
       </form>

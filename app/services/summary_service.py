@@ -7,7 +7,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from app.models import DailyNote, DailyTarget, ExerciseCheckIn, Food, FoodResolutionHistory, MealEntry, MealEntryItem
+from app.models import DailyNote, DailyTarget, ExerciseCheckIn, Food, FoodResolutionHistory, HealthMeasurement, MealEntry, MealEntryItem
+from app.services.nutrition import item_net_carbs
 
 
 class SummaryService:
@@ -32,7 +33,7 @@ class SummaryService:
             "carbs": round(sum(item.carbs_g_snapshot for item in items), 2),
             "fat": round(sum(item.fat_g_snapshot for item in items), 2),
             "fiber": round(sum(item.fiber_g_snapshot or 0.0 for item in items), 2),
-            "net_carbs": round(sum(item.net_carbs_g_snapshot or 0.0 for item in items), 2),
+            "net_carbs": round(sum(item_net_carbs(item) for item in items), 2),
         }
         target = self._resolve_target(session, target_date)
         last_entry = session.scalar(
@@ -93,12 +94,28 @@ class SummaryService:
         adherence_days = 0
         top_foods: defaultdict[str, float] = defaultdict(float)
 
+        today = date.today()
+        yesterday = today - timedelta(days=1)
         for offset in range(7):
             current_day = start_date + timedelta(days=offset)
             summary = self.get_daily_summary(session, current_day)
+            label = current_day.strftime("%a")
+            short_label = label[0]
+            if current_day == today:
+                label = "Today"
+                short_label = "T"
+            elif current_day == yesterday:
+                label = "Yesterday"
+                short_label = "Y"
             days.append(
                 {
+                    "date": current_day.isoformat(),
                     "day": current_day.strftime("%a"),
+                    "label": label,
+                    "short_label": short_label,
+                    "is_selected": current_day == end_date,
+                    "is_today": current_day == today,
+                    "is_yesterday": current_day == yesterday,
                     "calories": summary["calories"]["consumed"],
                     "protein_g": summary["protein"]["consumed"],
                     "carbs_g": summary["carbs"]["consumed"],
@@ -177,6 +194,12 @@ class SummaryService:
             exercise_checkin = session.scalar(select(ExerciseCheckIn).where(ExerciseCheckIn.checkin_date == target_date))
         except OperationalError:
             exercise_checkin = None
+        try:
+            health_measurement = session.scalar(
+                select(HealthMeasurement).where(HealthMeasurement.measurement_date == target_date)
+            )
+        except OperationalError:
+            health_measurement = None
         return {
             "custom_food_count": int(custom_food_count),
             "remembered_phrases": int(remembered_phrases),
@@ -187,5 +210,9 @@ class SummaryService:
                 "zone4_minutes": exercise_checkin.zone4_minutes if exercise_checkin and exercise_checkin.zone4_minutes is not None else 0,
                 "did_push_workout": exercise_checkin.did_push_workout if exercise_checkin else False,
                 "did_pull_workout": exercise_checkin.did_pull_workout if exercise_checkin else False,
+            },
+            "health_measurement": {
+                "weight_lb": health_measurement.weight_lb if health_measurement else None,
+                "body_fat_pct": health_measurement.body_fat_pct if health_measurement else None,
             },
         }

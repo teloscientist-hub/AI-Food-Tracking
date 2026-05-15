@@ -4,12 +4,15 @@
 {% set page_kicker = "Daily detail" %}
 {% set nav_active = "daily" %}
 {% set page_date = target_date %}
+{% set prev_href = "/daily/" ~ prev_date %}
+{% set next_href = "/daily/" ~ next_date %}
+{% set date_form_action = "/daily" %}
 {% include "_page_topbar.html" %}
 <section class="hero">
   <div>
     <p class="subtle">Consumed {{ daily.calories.consumed }} calories, {{ daily.protein.consumed }}g protein, {{ daily.carbs.consumed }}g carbs, {{ daily.fat.consumed }}g fat.</p>
   </div>
-  <a class="button outline" href="/log">Add food</a>
+  <a class="button outline" href="/log?target_date={{ target_date }}">Add food</a>
 </section>
 {% for group in meal_groups %}
 <section class="panel meal-card" data-meal-label="{{ group.label }}" data-target-date="{{ target_date }}">
@@ -34,8 +37,9 @@
     <div class="meal-row">
       <button class="meal-drag-handle" type="button" draggable="true" data-item-id="{{ item.id }}" aria-label="Move item">⋮⋮</button>
       <div class="picker-thumb meal-thumb">
-        {% if item.food and item.food.image_url %}
-        <img src="{{ item.food.image_url }}" alt="{{ item.resolved_food_name or item.parsed_phrase }}">
+        {% set meal_image_url = food_image_url(item.food) if item.food else none %}
+        {% if meal_image_url %}
+        <img src="{{ meal_image_url }}" alt="{{ item.resolved_food_name or item.parsed_phrase }}">
         {% elif item.food and item.food.icon_key %}
         <span class="food-icon-symbol">{{ food_icon_symbol(item.food.icon_key) }}</span>
         {% else %}
@@ -53,7 +57,7 @@
       <div class="meal-item-macros">
         <div class="picker-macro-cell">
           <small>Net Carbs</small>
-          <span class="coral-text">{{ item.net_carbs_g_snapshot if item.net_carbs_g_snapshot is not none else item.carbs_g_snapshot }}g</span>
+          <span class="coral-text">{{ item_net_carbs(item) }}g</span>
         </div>
         <div class="picker-macro-cell">
           <small>Protein</small>

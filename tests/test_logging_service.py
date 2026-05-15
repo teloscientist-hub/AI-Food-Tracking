@@ -39,6 +39,36 @@ def test_save_meal_allows_unresolved_items(session) -> None:
     assert unresolved.calories_snapshot == 0.0
 
 
+def test_save_meal_derives_net_carbs_snapshot_when_food_net_carbs_is_blank(session) -> None:
+    banana = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Banana, Raw",
+            serving_description="1 banana",
+            grams_per_serving=118,
+            calories=97,
+            protein_g=0.74,
+            carbs_g=22.71,
+            fat_g=0.28,
+            fiber_g=1.7,
+        ),
+    )
+
+    meal = LoggingService().save_meal(
+        session,
+        LogMealRequest(
+            raw_input_text="3 bananas",
+            meal_label="Snack 2",
+            items=[LogReviewItem(parsed_phrase="bananas", quantity=3, selected_food_id=banana.id)],
+        ),
+    )
+
+    item = meal.items[0]
+    assert item.carbs_g_snapshot == 68.13
+    assert item.fiber_g_snapshot == 5.1
+    assert item.net_carbs_g_snapshot == 63.03
+
+
 def test_save_meal_adds_alias_when_always_map_is_selected(session) -> None:
     yogurt = create_food(
         session,
@@ -131,6 +161,25 @@ def test_save_external_candidate_as_custom_creates_custom_food_with_alias(sessio
     assert created.canonical_name == "Premier Protein Cafe Latte"
     assert created.brand == "Premier Protein"
     assert any(alias.phrase == "pure protein cafe latte" for alias in created.aliases)
+
+
+def test_serving_multiplier_scales_native_serving_count_units(session) -> None:
+    asparagus = create_food(
+        session,
+        FoodCreate(
+            canonical_name="MML Roasted Asparagus",
+            serving_description="10 spears",
+            grams_per_serving=1,
+            calories=110,
+            protein_g=3.5,
+            carbs_g=6,
+            fat_g=0.5,
+        ),
+    )
+
+    assert serving_multiplier(10.0, "spears", asparagus) == 1.0
+    assert serving_multiplier(1.0, "spear", asparagus) == 0.1
+    assert serving_multiplier(5.0, "spears", asparagus) == 0.5
 
 
 def test_serving_multiplier_converts_unit_weight_against_serving_size(session) -> None:

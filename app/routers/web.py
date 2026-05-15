@@ -18,6 +18,7 @@ from app.models import DailyTarget, ExerciseCheckIn, ExerciseGoal, Food, HealthG
 from app.schemas.foods import FoodCreate, FoodUpdate
 from app.schemas.logging import LogMealRequest, LogReviewItem
 from app.services.food_service import (
+    _food_image_url,
     create_food,
     food_to_read,
     get_food_library_cards,
@@ -25,16 +26,21 @@ from app.services.food_service import (
     get_food,
     remove_custom_food_from_library,
     search_foods,
+    serving_description_amount_unit,
     update_food,
 )
 from app.services.food_icons import ICON_LIBRARY
 from app.services.logging_service import LoggingService, multiply_value, serving_multiplier
+from app.services.nutrition import derive_net_carbs, food_net_carbs, item_net_carbs
 from app.services.off_client import OpenFoodFactsClient
 from app.services.summary_service import SummaryService
 from app.services.usda_client import ExternalFoodCandidate, USDAClient
 
 
 templates = Jinja2Templates(directory="app/templates")
+templates.env.globals["food_image_url"] = _food_image_url
+templates.env.globals["food_net_carbs"] = food_net_carbs
+templates.env.globals["item_net_carbs"] = item_net_carbs
 router = APIRouter()
 
 
@@ -42,6 +48,123 @@ def _progress(consumed: float, target: float | None) -> float:
     if not target or target <= 0:
         return 0
     return max(0.0, min(100.0, round((consumed / target) * 100, 1)))
+
+
+def _goal_ring_progress(consumed: float, target: float | None) -> dict[str, float]:
+    if not target or target <= 0:
+        return {"base_percent": 0.0, "over_percent": 0.0, "total_percent": 0.0}
+    total_percent = max(0.0, round((consumed / target) * 100, 1))
+    return {
+        "base_percent": min(total_percent, 100.0),
+        "over_percent": min(max(total_percent - 100.0, 0.0), 100.0),
+        "total_percent": total_percent,
+    }
+
+
+def _hex_to_rgb(color: str) -> tuple[int, int, int]:
+    raw = color.lstrip("#")
+    return int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16)
+
+
+def _rgb_to_hex(rgb: tuple[int, int, int]) -> str:
+    return "#" + "".join(f"{max(0, min(channel, 255)):02x}" for channel in rgb)
+
+
+def _mix_color(start_color: str, end_color: str, amount: float) -> str:
+    start = _hex_to_rgb(start_color)
+    end = _hex_to_rgb(end_color)
+    ratio = max(0.0, min(amount, 1.0))
+    return _rgb_to_hex(
+        tuple(round(start[index] + (end[index] - start[index]) * ratio) for index in range(3))
+    )
+
+
+def _darken_color(color: str, amount: float = 0.68) -> str:
+    return _rgb_to_hex(tuple(round(channel * amount) for channel in _hex_to_rgb(color)))
+
+
+def _goal_ring_segments(percent: float, start_color: str, end_color: str, segment_count: int = 80) -> list[dict[str, float | str]]:
+    capped_percent = max(0.0, min(percent, 100.0))
+    if capped_percent <= 0:
+        return []
+    segment_size = 100.0 / segment_count
+    segments: list[dict[str, float | str]] = []
+    start = 0.0
+    while start < capped_percent:
+        end = min(start + segment_size, capped_percent)
+        length = round(end - start, 3)
+        color = _mix_color(start_color, end_color, end / 100.0)
+        segments.append({"start": round(start, 3), "length": length, "color": color})
+        start = end
+    return segments
+
+
+def _goal_ring_cap(radius: float, percent: float, color: str) -> dict[str, float | str] | None:
+    if percent <= 0:
+        return None
+    angle = math.radians(-90 + (max(0.0, min(percent, 100.0)) * 3.6))
+    return {
+        "x": round(110 + radius * math.cos(angle), 2),
+        "y": round(110 + radius * math.sin(angle), 2),
+        "color": color,
+    }
+
+
+def _goal_ring(
+    label: str,
+    radius: float,
+    base_color: str,
+    over_color: str,
+    consumed: float,
+    target: float | None,
+) -> dict[str, object]:
+    progress = _goal_ring_progress(consumed, target)
+    dark_color = _darken_color(over_color)
+    cap_percent = progress["over_percent"] or progress["base_percent"]
+    cap_color = (
+        _mix_color(over_color, dark_color, progress["over_percent"] / 100.0)
+        if progress["over_percent"] > 0
+        else _mix_color(base_color, over_color, progress["base_percent"] / 100.0)
+    )
+    return {
+        "label": label,
+        "radius": radius,
+        "base_color": base_color,
+        "over_color": over_color,
+        "dark_color": dark_color,
+        "base_segments": _goal_ring_segments(progress["base_percent"], base_color, over_color),
+        "over_segments": _goal_ring_segments(progress["over_percent"], over_color, dark_color),
+        "cap": _goal_ring_cap(radius, cap_percent, cap_color),
+        **progress,
+    }
+
+
+def _macro_pie_progress(protein_g: float, fat_g: float, net_carbs_g: float) -> dict[str, float]:
+    protein_calories = max(protein_g, 0.0) * 4
+    fat_calories = max(fat_g, 0.0) * 9
+    net_carbs_calories = max(net_carbs_g, 0.0) * 5
+    total_calories = protein_calories + fat_calories + net_carbs_calories
+    if total_calories <= 0:
+        return {
+            "net_carbs_percent": 0.0,
+            "protein_percent": 0.0,
+            "fat_percent": 0.0,
+            "net_carbs_stop": 0.0,
+            "protein_stop": 0.0,
+            "fat_stop": 0.0,
+        }
+
+    net_carbs_percent = round((net_carbs_calories / total_calories) * 100, 1)
+    protein_percent = round((protein_calories / total_calories) * 100, 1)
+    fat_percent = round((fat_calories / total_calories) * 100, 1)
+    return {
+        "net_carbs_percent": net_carbs_percent,
+        "protein_percent": protein_percent,
+        "fat_percent": fat_percent,
+        "net_carbs_stop": net_carbs_percent,
+        "protein_stop": min(round(net_carbs_percent + protein_percent, 1), 100.0),
+        "fat_stop": 100.0,
+    }
 
 
 def _nice_axis_step(raw_step: float) -> float:
@@ -60,6 +183,14 @@ def _nice_axis_step(raw_step: float) -> float:
     return nice_fraction * (10 ** exponent)
 
 
+def _format_week_goal_label(value: float, unit: str) -> str:
+    if value == round(value):
+        label = f"{int(round(value)):,}"
+    else:
+        label = f"{value:,.1f}".rstrip("0").rstrip(".")
+    return f"{label}{unit} goal"
+
+
 def _week_axis_for_metric(metric: str, daily: dict, weekly: dict, weekly_metric_key: str) -> dict[str, object]:
     metric_map = {
         "calories": daily["calories"]["target"],
@@ -69,11 +200,12 @@ def _week_axis_for_metric(metric: str, daily: dict, weekly: dict, weekly_metric_
         "fiber": daily["fiber"]["target"] if daily["fiber"] else None,
         "net_carbs": daily["net_carbs"]["target"] if daily["net_carbs"] else None,
     }
-    target = metric_map.get(metric)
+    raw_target = metric_map.get(metric)
+    target = float(raw_target) if raw_target and raw_target > 0 else None
     values = [float(day.get(weekly_metric_key, 0) or 0) for day in weekly["days"]]
     max_value = max(values or [0.0])
 
-    if target and target > 0:
+    if target:
         step = _nice_axis_step(target / 4)
         desired_max = max(target * 2, max_value)
         axis_max = math.ceil(desired_max / step) * step
@@ -84,10 +216,14 @@ def _week_axis_for_metric(metric: str, daily: dict, weekly: dict, weekly_metric_
 
     label_count = int(round(axis_max / step))
     labels = [round(step * index, 2) for index in range(label_count, 0, -1)]
+    target_percent = round((target / axis_max) * 100, 3) if target else 0.0
     return {
         "max": float(axis_max),
         "step": float(step),
         "labels": labels,
+        "target": target,
+        "target_percent": min(max(target_percent, 0.0), 100.0),
+        "target_label": _format_week_goal_label(target, "" if metric == "calories" else "g") if target else "",
     }
 
 
@@ -107,7 +243,7 @@ def _group_entries_by_meal(entries: list) -> list[dict]:
             grouped[label]["totals"]["protein"] += item.protein_g_snapshot
             grouped[label]["totals"]["carbs"] += item.carbs_g_snapshot
             grouped[label]["totals"]["fat"] += item.fat_g_snapshot
-            grouped[label]["totals"]["net_carbs"] += item.net_carbs_g_snapshot or item.carbs_g_snapshot
+            grouped[label]["totals"]["net_carbs"] += item_net_carbs(item)
     return list(grouped.values())
 
 
@@ -274,6 +410,91 @@ def _get_or_create_target_meal_entry(session: Session, target_date: date, meal_l
     return meal_entry
 
 
+def _apply_food_snapshots(item: MealEntryItem, food: Food, quantity: float, unit: str | None) -> None:
+    factor = serving_multiplier(quantity, unit, food)
+    item.serving_description_snapshot = food.serving_description
+    item.grams_per_serving_snapshot = multiply_value(food.grams_per_serving, factor)
+    item.calories_snapshot = multiply_value(food.calories, factor) or 0.0
+    item.protein_g_snapshot = multiply_value(food.protein_g, factor) or 0.0
+    item.carbs_g_snapshot = multiply_value(food.carbs_g, factor) or 0.0
+    item.fat_g_snapshot = multiply_value(food.fat_g, factor) or 0.0
+    item.fiber_g_snapshot = multiply_value(food.fiber_g, factor)
+    item.net_carbs_g_snapshot = derive_net_carbs(
+        item.carbs_g_snapshot,
+        item.fiber_g_snapshot,
+        multiply_value(food.net_carbs_g, factor),
+    )
+
+
+def _merge_or_add_picker_item(
+    session: Session,
+    food: Food,
+    quantity: float,
+    unit: str | None,
+    meal_label: str,
+    logged_at: datetime,
+) -> MealEntryItem:
+    target_date = logged_at.date()
+    start_dt = datetime.combine(target_date, time.min)
+    end_dt = datetime.combine(target_date, time.max)
+    unit_filter = MealEntryItem.unit.is_(None) if unit is None else MealEntryItem.unit == unit
+    existing_items = session.scalars(
+        select(MealEntryItem)
+        .join(MealEntry, MealEntry.id == MealEntryItem.meal_entry_id)
+        .where(
+            MealEntry.meal_label == meal_label,
+            MealEntry.logged_at >= start_dt,
+            MealEntry.logged_at <= end_dt,
+            MealEntryItem.food_id == food.id,
+            unit_filter,
+        )
+        .order_by(MealEntry.logged_at.asc(), MealEntry.id.asc(), MealEntryItem.id.asc())
+    ).all()
+
+    if existing_items:
+        primary = existing_items[0]
+        duplicate_entry_ids = [item.meal_entry_id for item in existing_items[1:]]
+        primary.quantity = round(sum(item.quantity for item in existing_items) + quantity, 6)
+        primary.quantity_text = f"{primary.quantity:g}"
+        primary.parsed_phrase = food.canonical_name
+        primary.normalized_phrase = food.normalized_name
+        primary.resolution_status = "resolved"
+        primary.resolution_strategy = "logged"
+        primary.resolution_confidence = 1.0
+        primary.resolved_food_name = food.canonical_name
+        primary.resolved_source = food.source
+        _apply_food_snapshots(primary, food, primary.quantity, unit)
+        for duplicate in existing_items[1:]:
+            session.delete(duplicate)
+        session.flush()
+        for entry_id in duplicate_entry_ids:
+            has_items = session.scalar(select(MealEntryItem.id).where(MealEntryItem.meal_entry_id == entry_id).limit(1))
+            if not has_items:
+                empty_entry = session.get(MealEntry, entry_id)
+                if empty_entry:
+                    session.delete(empty_entry)
+        return primary
+
+    meal_entry = _get_or_create_target_meal_entry(session, target_date, meal_label, logged_at.time())
+    item = MealEntryItem(
+        meal_entry_id=meal_entry.id,
+        food_id=food.id,
+        parsed_phrase=food.canonical_name,
+        normalized_phrase=food.normalized_name,
+        quantity=quantity,
+        unit=unit,
+        quantity_text=f"{quantity:g}",
+        resolution_status="resolved",
+        resolution_strategy="logged",
+        resolution_confidence=1.0,
+        resolved_food_name=food.canonical_name,
+        resolved_source=food.source,
+    )
+    _apply_food_snapshots(item, food, quantity, unit)
+    session.add(item)
+    return item
+
+
 @router.get("/")
 def dashboard(
     request: Request,
@@ -309,6 +530,11 @@ def dashboard(
             daily["net_carbs"]["target"] if daily["net_carbs"] else None,
         ),
     }
+    macro_pie = _macro_pie_progress(
+        daily["protein"]["consumed"],
+        daily["fat"]["consumed"],
+        daily["net_carbs"]["consumed"] if daily["net_carbs"] else 0,
+    )
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -318,10 +544,32 @@ def dashboard(
             "metric": metric,
             "max_metric": max_metric or 1,
             "progress": progress,
+            "macro_pie": macro_pie,
             "goal_rings": [
-                {"label": "Net Carbs", "color": "#df5a57", "percent": progress["net_carbs"]},
-                {"label": "Protein", "color": "#3a74b9", "percent": progress["protein"]},
-                {"label": "Fat", "color": "#e39a36", "percent": progress["fat"]},
+                _goal_ring(
+                    "Net Carbs",
+                    102,
+                    "#efaaaa",
+                    "#df5a57",
+                    daily["net_carbs"]["consumed"] if daily["net_carbs"] else 0,
+                    daily["net_carbs"]["target"] if daily["net_carbs"] else None,
+                ),
+                _goal_ring(
+                    "Protein",
+                    82,
+                    "#a6c6e8",
+                    "#3a74b9",
+                    daily["protein"]["consumed"],
+                    daily["protein"]["target"],
+                ),
+                _goal_ring(
+                    "Fat",
+                    62,
+                    "#f3cf93",
+                    "#e39a36",
+                    daily["fat"]["consumed"],
+                    daily["fat"]["target"],
+                ),
             ],
             "selected_date": selected_date.isoformat(),
             "prev_date": prev_date,
@@ -336,6 +584,7 @@ def dashboard(
             "meal_options": MEAL_OPTIONS[:-1],
             "dashboard_return": f"/?target_date={selected_date.isoformat()}&metric={metric}",
             "exercise_checkin": context["exercise_checkin"],
+            "health_measurement": context["health_measurement"],
             "error": error,
         },
     )
@@ -352,6 +601,12 @@ def save_dashboard_note(
     return RedirectResponse(url="/", status_code=303)
 
 
+def _optional_float(value: str | None) -> float | None:
+    if value is None or not value.strip():
+        return None
+    return float(value)
+
+
 @router.post("/dashboard/exercise")
 def save_dashboard_exercise(
     checkin_date: str = Form(""),
@@ -359,6 +614,8 @@ def save_dashboard_exercise(
     zone4_minutes: float = Form(0.0),
     did_push_workout: str | None = Form(None),
     did_pull_workout: str | None = Form(None),
+    weight_lb: str = Form(""),
+    body_fat_pct: str = Form(""),
     session: Session = Depends(get_session),
 ) -> object:
     target_date = date.fromisoformat(checkin_date) if checkin_date else date.today()
@@ -378,6 +635,22 @@ def save_dashboard_exercise(
         checkin.did_pull_workout = values["did_pull_workout"]
     else:
         session.add(ExerciseCheckIn(checkin_date=target_date, **values))
+
+    parsed_weight = _optional_float(weight_lb)
+    parsed_body_fat = _optional_float(body_fat_pct)
+    measurement = session.scalar(select(HealthMeasurement).where(HealthMeasurement.measurement_date == target_date))
+    if measurement:
+        measurement.weight_lb = parsed_weight
+        measurement.body_fat_pct = parsed_body_fat
+    elif parsed_weight is not None or parsed_body_fat is not None:
+        session.add(
+            HealthMeasurement(
+                measurement_date=target_date,
+                weight_lb=parsed_weight,
+                body_fat_pct=parsed_body_fat,
+            )
+        )
+
     session.commit()
     return RedirectResponse(url="/", status_code=303)
 
@@ -403,6 +676,64 @@ def _logged_at_for_date(logged_at: str, selected_date: date) -> str:
     return datetime.combine(selected_date, datetime.now().time()).isoformat(timespec="minutes")
 
 
+def _parse_picker_order(picker_order: str) -> list[int]:
+    food_ids: list[int] = []
+    for raw_id in picker_order.split(","):
+        raw_id = raw_id.strip()
+        if not raw_id:
+            continue
+        try:
+            food_ids.append(int(raw_id))
+        except ValueError:
+            continue
+    return food_ids
+
+
+def _picker_order_value(picker_foods: list[dict]) -> str:
+    return ",".join(str(item["food"].id) for item in picker_foods)
+
+
+def _format_picker_quantity(value: float) -> str:
+    return f"{value:g}"
+
+
+def _apply_picker_quantity_override(
+    picker_foods: list[dict],
+    food_id: int | None,
+    quantity: float | None,
+    unit: str,
+) -> None:
+    if food_id is None or quantity is None:
+        return
+    normalized_unit = unit or None
+    for item in picker_foods:
+        if item["food"].id != food_id:
+            continue
+        item["quick_quantity"] = quantity
+        item["quick_unit"] = normalized_unit
+        if normalized_unit:
+            item["quick_label"] = f"{_format_picker_quantity(quantity)} {normalized_unit}"
+            if all(option["value"] != normalized_unit for option in item["unit_options"]):
+                item["unit_options"].insert(0, {"value": normalized_unit, "label": normalized_unit})
+        else:
+            item["quick_label"] = f"{_format_picker_quantity(quantity)} {item['food'].serving_description}"
+        return
+
+
+def _parse_optional_int(value: str) -> int | None:
+    try:
+        return int(value) if value else None
+    except ValueError:
+        return None
+
+
+def _parse_optional_float(value: str) -> float | None:
+    try:
+        return float(value) if value else None
+    except ValueError:
+        return None
+
+
 @router.get("/log")
 def add_log_entry(
     request: Request,
@@ -413,11 +744,22 @@ def add_log_entry(
     target_date: str = "",
     saved: str | None = None,
     error: str = "",
+    picker_order: str = "",
+    picker_scroll_y: str = "",
+    picker_keep_food_id: str = "",
+    picker_keep_quantity: str = "",
+    picker_keep_unit: str = "",
     session: Session = Depends(get_session),
 ) -> object:
     selected_date = _resolve_selected_date(target_date, logged_at)
     effective_logged_at = _logged_at_for_date(logged_at, selected_date)
-    picker_foods = get_picker_foods(session, q, source)
+    picker_foods = get_picker_foods(session, q, source, stable_order=_parse_picker_order(picker_order))
+    _apply_picker_quantity_override(
+        picker_foods,
+        _parse_optional_int(picker_keep_food_id),
+        _parse_optional_float(picker_keep_quantity),
+        picker_keep_unit,
+    )
     return templates.TemplateResponse(
         request,
         "add_log.html",
@@ -430,6 +772,8 @@ def add_log_entry(
             "logged_at": effective_logged_at,
             "saved": saved or "",
             "error": error,
+            "picker_order": _picker_order_value(picker_foods),
+            "picker_scroll_y": picker_scroll_y,
             "meal_options": MEAL_OPTIONS,
             "selected_date": selected_date.isoformat(),
             "prev_date": (selected_date - timedelta(days=1)).isoformat(),
@@ -452,7 +796,7 @@ def settings_page(
     net_carbs_target = target.net_carbs_target_g if target and target.net_carbs_target_g is not None else 40.0
     fiber_target = target.fiber_target_g if target and target.fiber_target_g is not None else 30.0
     total_carbs_target = target.carbs_target_g if target else (net_carbs_target + fiber_target)
-    calculated_calories = round((protein_target * 4) + (fat_target * 9) + (total_carbs_target * 4), 2)
+    calculated_calories = round((protein_target * 4) + (fat_target * 9) + (net_carbs_target * 5), 2)
     try:
         health_goal = session.scalar(select(HealthGoal).where(HealthGoal.target_date == date.today()))
         if not health_goal:
@@ -637,11 +981,22 @@ def picker_log_entry(
     logged_at: str = "",
     target_date: str = "",
     saved: str | None = None,
+    picker_order: str = "",
+    picker_scroll_y: str = "",
+    picker_keep_food_id: str = "",
+    picker_keep_quantity: str = "",
+    picker_keep_unit: str = "",
     session: Session = Depends(get_session),
 ) -> object:
     selected_date = _resolve_selected_date(target_date, logged_at)
     effective_logged_at = _logged_at_for_date(logged_at, selected_date)
-    picker_foods = get_picker_foods(session, q, source)
+    picker_foods = get_picker_foods(session, q, source, stable_order=_parse_picker_order(picker_order))
+    _apply_picker_quantity_override(
+        picker_foods,
+        _parse_optional_int(picker_keep_food_id),
+        _parse_optional_float(picker_keep_quantity),
+        picker_keep_unit,
+    )
     return templates.TemplateResponse(
         request,
         "log_picker.html",
@@ -652,6 +1007,8 @@ def picker_log_entry(
             "meal_label": meal_label,
             "logged_at": effective_logged_at,
             "saved": saved or "",
+            "picker_order": _picker_order_value(picker_foods),
+            "picker_scroll_y": picker_scroll_y,
             "meal_options": MEAL_OPTIONS,
             "selected_date": selected_date.isoformat(),
             "prev_date": (selected_date - timedelta(days=1)).isoformat(),
@@ -669,40 +1026,40 @@ def add_picker_food(
     logged_at: str = Form(""),
     q: str = Form(""),
     source: str = Form("all"),
+    picker_order: str = Form(""),
+    picker_scroll_y: str = Form(""),
     redirect_to: str = Form("/log/picker"),
     session: Session = Depends(get_session),
 ) -> object:
     food = get_food(session, food_id)
     if not food:
         raise HTTPException(status_code=404, detail="Food not found")
-    service = LoggingService()
-    service.save_meal(
+    normalized_unit = unit or None
+    logged_dt = datetime.fromisoformat(logged_at) if logged_at else datetime.now()
+    _merge_or_add_picker_item(
         session,
-        LogMealRequest(
-            raw_input_text=f"{quantity:g} {food.canonical_name}",
-            meal_label=meal_label,
-            logged_at=datetime.fromisoformat(logged_at) if logged_at else None,
-            items=[
-                LogReviewItem(
-                    parsed_phrase=food.canonical_name,
-                    quantity=quantity,
-                    unit=unit or None,
-                    quantity_text=str(quantity),
-                    selected_food_id=food.id,
-                    always_map=False,
-                )
-            ],
-        ),
+        food=food,
+        quantity=quantity,
+        unit=normalized_unit,
+        meal_label=meal_label,
+        logged_at=logged_dt,
     )
-    params = urlencode(
-        {
-            "q": q,
-            "source": source,
-            "meal_label": meal_label,
-            "logged_at": logged_at,
-            "saved": food.canonical_name,
-        }
-    )
+    session.commit()
+    redirect_params = {
+        "q": q,
+        "source": source,
+        "meal_label": meal_label,
+        "logged_at": logged_at,
+        "saved": food.canonical_name,
+    }
+    if picker_order:
+        redirect_params["picker_order"] = picker_order
+    if picker_scroll_y:
+        redirect_params["picker_scroll_y"] = picker_scroll_y
+    redirect_params["picker_keep_food_id"] = str(food.id)
+    redirect_params["picker_keep_quantity"] = _format_picker_quantity(quantity)
+    redirect_params["picker_keep_unit"] = normalized_unit or ""
+    params = urlencode(redirect_params)
     target = redirect_to if redirect_to in {"/log", "/log/picker"} else "/log/picker"
     return RedirectResponse(url=f"{target}?{params}", status_code=303)
 
@@ -882,7 +1239,7 @@ def foods_library(
                     "image_url": candidate.raw_source_payload.get("image_front_url")
                     or candidate.raw_source_payload.get("image_url")
                     or candidate.raw_source_payload.get("image_small_url"),
-                    "net_carbs_g": candidate.net_carbs_g if candidate.net_carbs_g is not None else candidate.carbs_g,
+                    "net_carbs_g": derive_net_carbs(candidate.carbs_g, candidate.fiber_g, candidate.net_carbs_g),
                     "protein_g": candidate.protein_g,
                     "fat_g": candidate.fat_g,
                     "calories": candidate.calories,
@@ -985,6 +1342,7 @@ def food_detail(
     food = get_food(session, food_id)
     if not food:
         raise HTTPException(status_code=404, detail="Food not found")
+    serving_measure = serving_description_amount_unit(food.serving_description)
     return templates.TemplateResponse(
         request,
         "food_detail.html",
@@ -992,6 +1350,7 @@ def food_detail(
             "food": food_to_read(session, food),
             "meal_options": MEAL_OPTIONS,
             "unit_options": _detail_unit_options(food.serving_description),
+            "native_quantity": serving_measure[0] if serving_measure else 1.0,
         },
     )
 
@@ -1108,6 +1467,18 @@ def save_existing_custom_food(
     return RedirectResponse(url="/foods", status_code=303)
 
 
+@router.get("/daily")
+def daily_log_date_redirect(target_date: str = "") -> object:
+    if not target_date:
+        target = date.today()
+    else:
+        try:
+            target = date.fromisoformat(target_date)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid target date") from exc
+    return RedirectResponse(url=f"/daily/{target.isoformat()}", status_code=303)
+
+
 @router.get("/daily/{target_date}")
 def daily_log_detail(
     request: Request, target_date: date, session: Session = Depends(get_session)
@@ -1122,6 +1493,9 @@ def daily_log_detail(
             "entries": entries,
             "daily": daily,
             "target_date": target_date.isoformat(),
+            "selected_date": target_date.isoformat(),
+            "prev_date": (target_date - timedelta(days=1)).isoformat(),
+            "next_date": (target_date + timedelta(days=1)).isoformat(),
             "meal_groups": _dashboard_meal_sections(entries),
             "meal_options": MEAL_OPTIONS[:-1],
             "daily_return": f"/daily/{target_date.isoformat()}",
@@ -1190,7 +1564,11 @@ def save_meal_item_edit(
             item.carbs_g_snapshot = multiply_value(food.carbs_g, factor) or 0.0
             item.fat_g_snapshot = multiply_value(food.fat_g, factor) or 0.0
             item.fiber_g_snapshot = multiply_value(food.fiber_g, factor)
-            item.net_carbs_g_snapshot = multiply_value(food.net_carbs_g, factor)
+            item.net_carbs_g_snapshot = derive_net_carbs(
+                item.carbs_g_snapshot,
+                item.fiber_g_snapshot,
+                multiply_value(food.net_carbs_g, factor),
+            )
             item.serving_description_snapshot = food.serving_description
 
     session.commit()

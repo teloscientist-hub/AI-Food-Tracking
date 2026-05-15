@@ -26,7 +26,7 @@
     </div>
     <div class="facts-table">
       <div class="facts-head"><span>Nutrient</span><span>Value</span></div>
-      <div class="facts-row coral"><span>Net Carbs</span><strong>{{ item.net_carbs_g_snapshot if item.net_carbs_g_snapshot is not none else item.carbs_g_snapshot }}g</strong></div>
+      <div class="facts-row coral"><span>Net Carbs</span><strong>{{ item_net_carbs(item) }}g</strong></div>
       <div class="facts-row blue"><span>Protein</span><strong>{{ item.protein_g_snapshot }}g</strong></div>
       <div class="facts-row gold"><span>Fat</span><strong>{{ item.fat_g_snapshot }}g</strong></div>
       <div class="facts-row neutral"><span>Calories</span><strong>{{ item.calories_snapshot }}</strong></div>

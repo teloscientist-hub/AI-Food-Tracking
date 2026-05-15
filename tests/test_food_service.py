@@ -8,6 +8,7 @@ from app.services.food_service import (
     get_food_library_cards,
     remove_custom_food_from_library,
     search_foods,
+    serving_description_amount_unit,
     serving_description_grams,
     update_food,
 )
@@ -44,6 +45,13 @@ def test_create_food_persists_aliases_and_custom_metadata(session, monkeypatch) 
     assert persisted.food_group_key is not None
     assert persisted.image_url == "https://example.com/cheese.png"
     assert persisted.icon_key == "cheese"
+
+
+def test_serving_description_amount_unit_reads_native_serving_counts() -> None:
+    assert serving_description_amount_unit("10 spears") == (10.0, "spears")
+    assert serving_description_amount_unit("1 spear") == (1.0, "spear")
+    assert serving_description_amount_unit("1/2 package") == (0.5, "package")
+    assert serving_description_amount_unit("8 oz steak") == (8.0, "oz")
 
 
 def test_serving_description_grams_handles_fractional_weight_text() -> None:

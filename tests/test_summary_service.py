@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
 
-from app.models import DailyNote, ExerciseCheckIn, MealEntry, MealEntryItem
+from app.models import DailyNote, ExerciseCheckIn, HealthMeasurement, MealEntry, MealEntryItem
 from app.schemas.foods import FoodCreate
 from app.schemas.logging import LogMealRequest, LogReviewItem
 from app.services.food_service import create_food
@@ -54,6 +54,68 @@ def test_daily_summary_calculates_totals_status_and_streak(session) -> None:
     assert summary["net_carbs"]["consumed"] == 0.8
     assert summary["streak_days"] == 2
     assert summary["status_text"] == "Under target"
+
+
+def test_daily_summary_derives_net_carbs_from_carbs_and_fiber_when_blank(session) -> None:
+    target_day = date.today()
+    meal_entry = MealEntry(
+        raw_input_text="banana and bar",
+        meal_label="Snack 2",
+        logged_at=datetime.combine(target_day, datetime.min.time(), tzinfo=UTC),
+    )
+    session.add(meal_entry)
+    session.flush()
+    session.add_all(
+        [
+            MealEntryItem(
+                meal_entry_id=meal_entry.id,
+                food_id=None,
+                parsed_phrase="banana",
+                normalized_phrase="banana",
+                quantity=3.0,
+                unit=None,
+                resolution_status="resolved",
+                resolution_strategy="logged",
+                resolution_confidence=1.0,
+                resolved_food_name="Banana, Raw",
+                resolved_source="usda",
+                serving_description_snapshot="1 banana",
+                grams_per_serving_snapshot=None,
+                calories_snapshot=291.0,
+                protein_g_snapshot=2.22,
+                carbs_g_snapshot=68.13,
+                fat_g_snapshot=0.84,
+                fiber_g_snapshot=5.1,
+                net_carbs_g_snapshot=None,
+            ),
+            MealEntryItem(
+                meal_entry_id=meal_entry.id,
+                food_id=None,
+                parsed_phrase="protein bar",
+                normalized_phrase="protein bar",
+                quantity=1.0,
+                unit=None,
+                resolution_status="resolved",
+                resolution_strategy="logged",
+                resolution_confidence=1.0,
+                resolved_food_name="Protein Bar",
+                resolved_source="custom",
+                serving_description_snapshot="1 bar",
+                grams_per_serving_snapshot=None,
+                calories_snapshot=160.0,
+                protein_g_snapshot=15.0,
+                carbs_g_snapshot=14.0,
+                fat_g_snapshot=6.0,
+                fiber_g_snapshot=1.0,
+                net_carbs_g_snapshot=7.0,
+            ),
+        ]
+    )
+    session.commit()
+
+    summary = SummaryService().get_daily_summary(session, target_day)
+
+    assert summary["net_carbs"]["consumed"] == 70.03
 
 
 def test_weekly_summary_reports_averages_and_top_foods(session) -> None:
@@ -164,6 +226,7 @@ def test_dashboard_context_includes_counts_note_and_exercise(session) -> None:
             did_pull_workout=False,
         )
     )
+    session.add(HealthMeasurement(measurement_date=date.today(), weight_lb=211.6, body_fat_pct=27.4))
     session.commit()
 
     context = SummaryService().get_dashboard_context(session, date.today())
@@ -175,3 +238,5 @@ def test_dashboard_context_includes_counts_note_and_exercise(session) -> None:
     assert context["exercise_checkin"]["zone4_minutes"] == 18
     assert context["exercise_checkin"]["did_push_workout"] is True
     assert context["exercise_checkin"]["did_pull_workout"] is False
+    assert context["health_measurement"]["weight_lb"] == 211.6
+    assert context["health_measurement"]["body_fat_pct"] == 27.4

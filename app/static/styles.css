@@ -1036,6 +1036,26 @@ input, select, textarea {
 .exercise-entry-card .button.secondary {
   width: 100%;
 }
+.body-checkin-section {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.section-mini-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.section-mini-header h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.body-checkin-grid {
+  gap: 12px;
+}
 .meal-stack {
   display: grid;
   gap: 18px;
@@ -1043,12 +1063,16 @@ input, select, textarea {
 .compact-card {
   min-height: 0;
 }
-.macro-bubble-pie {
+.macro-bubble.macro-bubble-pie {
+  --macro-net-carbs-stop: 0%;
+  --macro-protein-stop: 0%;
+  --macro-fat-stop: 0%;
   background:
     conic-gradient(
-      #3a74b9 0 38%,
-      #e39a36 38% 68%,
-      #df5a57 68% 100%
+      var(--coral) 0 var(--macro-net-carbs-stop),
+      var(--blue) var(--macro-net-carbs-stop) var(--macro-protein-stop),
+      var(--gold) var(--macro-protein-stop) var(--macro-fat-stop),
+      var(--soft-gray) var(--macro-fat-stop) 100%
     );
 }
 .meal-empty-row {
@@ -1157,8 +1181,8 @@ input, select, textarea {
 .bar.soft span { background: linear-gradient(90deg, #f0f3f8, #dfe6f0); }
 .macro-row:nth-child(1) .bar.soft span { background: linear-gradient(90deg, #3a74b9, #5f97d8); }
 .macro-row:nth-child(2) .bar.soft span { background: linear-gradient(90deg, #e39a36, #efb45d); }
-.macro-row:nth-child(3) .bar.soft span { background: linear-gradient(90deg, #7b818b, #a0a7b0); }
-.macro-row:nth-child(4) .bar.soft span { background: linear-gradient(90deg, #df5a57, #ef7b79); }
+.macro-row:nth-child(3) .bar.soft span { background: linear-gradient(90deg, #df5a57, #ef7b79); }
+.macro-single-row .bar.soft span { background: linear-gradient(90deg, #7b818b, #a0a7b0); }
 .macro-footnotes {
   display: grid;
   gap: 10px;
@@ -1188,23 +1212,28 @@ input, select, textarea {
   height: 220px;
   margin: 2px auto 18px;
 }
-.goal-ring {
+.goal-ring-svg {
   position: absolute;
   inset: 0;
-  border-radius: 50%;
-  background: conic-gradient(var(--ring-color) 0 var(--ring-percent), #f1f4f8 var(--ring-percent) 100%);
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
-
-.goal-ring::after {
-  content: "";
-  position: absolute;
-  inset: 14px;
-  border-radius: 50%;
-  background: #ffffff;
+.goal-ring-track,
+.goal-ring-progress {
+  fill: none;
+  stroke-width: 14;
 }
-
-.goal-ring.layer-2 { inset: 20px; }
-.goal-ring.layer-3 { inset: 40px; }
+.goal-ring-track {
+  stroke: #dfe7f1;
+}
+.goal-ring-segment {
+  stroke-linecap: butt;
+}
+.goal-ring-over,
+.goal-ring-cap {
+  filter: drop-shadow(0 1px 1px rgba(25, 37, 56, 0.1));
+}
 .goal-ring-center {
   position: absolute;
   inset: 52px;
@@ -1262,29 +1291,84 @@ input, select, textarea {
   flex-direction: column;
   justify-content: space-between;
   align-items: flex-end;
+  align-self: start;
+  height: 268px;
   color: var(--muted);
   font-size: 0.78rem;
-  padding: 8px 0 28px;
+  padding: 0;
+}
+
+.week-chart.metric-calories,
+.week-chart.metric-net_carbs,
+.week-chart.metric-carbs {
+  --week-accent: #df5a57;
+  --week-accent-dark: #a94442;
+}
+.week-chart.metric-protein {
+  --week-accent: #3a74b9;
+  --week-accent-dark: #285183;
+}
+.week-chart.metric-fat {
+  --week-accent: #e39a36;
+  --week-accent-dark: #9b641f;
+}
+.week-chart.metric-fiber {
+  --week-accent: #16b37d;
+  --week-accent-dark: #0f7d57;
 }
 
 .week-plot {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 14px;
-  align-items: end;
+  grid-template-rows: 268px auto;
+  gap: 8px;
   padding-bottom: 6px;
 }
 
-.week-col {
+.week-bars {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 14px;
+  align-items: end;
+  height: 268px;
+}
+
+.week-goal-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--week-goal-position);
+  border-top: 1px dashed rgba(37, 47, 66, 0.36);
+  z-index: 3;
+  pointer-events: none;
+}
+.week-goal-line span {
+  position: absolute;
+  right: 0;
+  bottom: 5px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow: 0 1px 0 rgba(226, 232, 241, 0.88);
+}
+
+.week-bar-cell {
+  position: relative;
+  z-index: 1;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  justify-content: center;
+  align-items: end;
+  min-width: 0;
+  height: 100%;
 }
 .week-bar-track {
   width: 14px;
-  height: 268px;
+  height: 100%;
   background:
     linear-gradient(180deg, rgba(223, 229, 238, 0.55), rgba(223, 229, 238, 0.55)) 0 0 / 100% 1px no-repeat,
     repeating-linear-gradient(
@@ -1297,19 +1381,66 @@ input, select, textarea {
     var(--soft-gray);
   border-radius: 999px;
   position: relative;
-  display: flex;
-  align-items: end;
+  overflow: hidden;
+}
+.week-bar-track.is-selected {
+  box-shadow: 0 0 0 3px rgba(223, 90, 87, 0.12);
+}
+.week-bar-value {
+  position: absolute;
+  left: 50%;
+  z-index: 4;
+  transform: translate(-50%, -6px);
+  color: color-mix(in srgb, var(--week-accent-dark) 82%, #ffffff);
+  font-size: 0.66rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.75);
+  pointer-events: none;
 }
 .week-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
+  min-height: 0;
   border-radius: inherit;
   background: #dfe5ee;
 }
-.week-bar.is-today { background: linear-gradient(180deg, #ef7b79, #df5a57); }
+.week-bar-total.has-value {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--week-accent) 32%, #ffffff),
+    color-mix(in srgb, var(--week-accent) 18%, #c6d0dd)
+  );
+}
+.week-bar-track.is-over-goal .week-bar-total.has-value {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--week-accent) 42%, #ffffff),
+    color-mix(in srgb, var(--week-accent) 22%, #c6d0dd)
+  );
+}
+.week-bar-over {
+  z-index: 2;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(180deg, var(--week-accent), var(--week-accent-dark));
+}
+.week-day-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 14px;
+  text-align: center;
+}
 .week-day {
+  min-width: 0;
   font-size: 0.92rem;
   font-weight: 600;
 }
+.week-day.is-yesterday { color: var(--coral); font-weight: 800; }
+.week-day.is-today { color: var(--text); font-weight: 800; }
 .status-strip.compact {
   grid-template-columns: 1fr;
   gap: 10px;
