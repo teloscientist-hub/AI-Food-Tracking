@@ -199,7 +199,7 @@
       <span>{{ error }}</span>
     </div>
     {% endif %}
-    <form action="/log/review" method="post" class="stack">
+    <form action="/log/review" method="post" class="stack js-parser-submit-form" data-loading-submit>
       <input type="hidden" name="redirect_to" value="/">
       <label class="quick-log-text">
         <span>Entry text</span>
@@ -219,7 +219,11 @@
           <input type="datetime-local" name="logged_at" value="{{ logged_at }}">
         </label>
       </div>
-      <button class="button primary" type="submit">Parse and review</button>
+      <button class="button primary" type="submit" data-loading-label="Parsing...">Parse and review</button>
+      <div class="parse-progress" data-loading-status role="status" aria-live="polite" hidden>
+        <strong>Parsing and matching foods...</strong>
+        <span>This usually takes a few seconds.</span>
+      </div>
     </form>
 
     <form action="/dashboard/exercise" method="post" class="stack exercise-entry-card">

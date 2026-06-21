@@ -45,6 +45,7 @@
             name="unit_{{ loop.index0 }}"
             value="{{ item.parsed_item.unit or '' }}"
             placeholder="serving / oz / tbsp"
+            data-unit-input="{{ loop.index0 }}"
           >
         </div>
       </label>
@@ -75,10 +76,25 @@
       {% elif preview.source == "usda" %}
       {% set source_label = "usda generic" %}
       {% endif %}
+      {% set parsed_unit = item.parsed_item.unit|default("", true)|lower %}
+      {% set preview_serving = preview.serving_description %}
+      {% if parsed_unit in ["gram", "grams"] %}
+      {% set preview_serving = "1 g" %}
+      {% elif parsed_unit in ["ounce", "ounces"] %}
+      {% set preview_serving = "1 oz" %}
+      {% elif parsed_unit in ["lbs"] %}
+      {% set preview_serving = "1 lb" %}
+      {% elif parsed_unit.endswith("ies") %}
+      {% set preview_serving = "1 " ~ parsed_unit[:-3] ~ "y" %}
+      {% elif parsed_unit and parsed_unit.endswith("s") and not parsed_unit.endswith("ss") %}
+      {% set preview_serving = "1 " ~ parsed_unit[:-1] %}
+      {% elif parsed_unit %}
+      {% set preview_serving = "1 " ~ parsed_unit %}
+      {% endif %}
       <div class="candidate-preview" data-candidate-preview="{{ loop.index0 }}">
         <div><span>Source</span><strong data-preview-source>{{ source_label }}</strong></div>
         <div><span>Strategy</span><strong data-preview-strategy>{{ preview.strategy }}</strong></div>
-        <div><span>Serving</span><strong data-preview-serving>{{ preview.serving_description }}</strong></div>
+        <div><span>Serving</span><strong data-preview-serving>{{ preview_serving }}</strong></div>
         <div><span>Macros</span><strong data-preview-macros>{{ preview.calories }} kcal · P {{ preview.protein_g }} · C {{ preview.carbs_g }} · F {{ preview.fat_g }}</strong></div>
       </div>
       {% endif %}
@@ -153,20 +169,114 @@
       const servingNode = preview.querySelector("[data-preview-serving]");
       const macrosNode = preview.querySelector("[data-preview-macros]");
       const quantityInput = document.querySelector(`[data-quantity-input="${reviewIndex}"]`);
+      const unitInput = document.querySelector(`[data-unit-input="${reviewIndex}"]`);
       const quantityTextInput = document.querySelector(`input[name="quantity_text_${reviewIndex}"]`);
       if (!(sourceNode instanceof HTMLElement) || !(strategyNode instanceof HTMLElement) || !(servingNode instanceof HTMLElement) || !(macrosNode instanceof HTMLElement)) {
         return;
       }
 
-      const scaleValue = (value, quantity) => {
+      const unitToGrams = {
+        g: 1.0,
+        gram: 1.0,
+        grams: 1.0,
+        oz: 28.3495,
+        ounce: 28.3495,
+        ounces: 28.3495,
+        lb: 453.592,
+        lbs: 453.592,
+        tbsp: 14.0,
+        tsp: 4.67,
+        stick: 113.0,
+        sticks: 113.0,
+        cup: 240.0,
+        cups: 240.0,
+      };
+      const massUnits = new Set(["g", "gram", "grams", "oz", "ounce", "ounces", "lb", "lbs"]);
+      const normalizeUnit = (unit) => {
+        const cleaned = String(unit || "").trim().toLowerCase().replace(/\s+/g, " ");
+        if (cleaned === "grams" || cleaned === "gram") {
+          return "g";
+        }
+        if (cleaned === "ounces" || cleaned === "ounce") {
+          return "oz";
+        }
+        if (cleaned === "lbs") {
+          return "lb";
+        }
+        if (cleaned.endsWith("ies")) {
+          return `${cleaned.slice(0, -3)}y`;
+        }
+        if (cleaned.endsWith("s") && !cleaned.endsWith("ss")) {
+          return cleaned.slice(0, -1);
+        }
+        return cleaned;
+      };
+      const unitsMatch = (left, right) => Boolean(normalizeUnit(left)) && normalizeUnit(left) === normalizeUnit(right);
+      const reviewServingLabel = (unit, fallback) => {
+        const normalized = normalizeUnit(unit);
+        return normalized ? `1 ${normalized}` : (fallback || "");
+      };
+      const servingAmountUnit = (servingDescription) => {
+        const match = String(servingDescription || "").match(/^\s*(\d+(?:\.\d+)?|\.\d+)\s*([a-z]+(?:\s+[a-z]+)?)/i);
+        if (!match) {
+          return null;
+        }
+        let unit = match[2].trim().toLowerCase().replace(/\s+/g, " ");
+        const firstWord = unit.split(" ")[0];
+        if (firstWord in unitToGrams) {
+          unit = firstWord;
+        }
+        return { quantity: Number(match[1]), unit };
+      };
+      const servingGrams = (candidate) => {
+        const serving = servingAmountUnit(candidate.serving_description);
+        if (serving && serving.unit in unitToGrams) {
+          return serving.quantity * unitToGrams[serving.unit];
+        }
+        return Number(candidate.grams_per_serving || 0);
+      };
+      const reviewMultiplier = (candidate, quantity, unit) => {
+        if (!unit) {
+          return quantity;
+        }
+        const serving = servingAmountUnit(candidate.serving_description);
+        if (serving && serving.quantity > 0 && unitsMatch(unit, serving.unit)) {
+          return quantity / serving.quantity;
+        }
+        const normalizedUnit = String(unit || "").trim().toLowerCase();
+        const gramsPerServing = servingGrams(candidate);
+        const servingIsWeightBased = Boolean(serving && serving.unit in unitToGrams);
+        if (
+          normalizedUnit in unitToGrams &&
+          gramsPerServing > 0 &&
+          (servingIsWeightBased || (massUnits.has(normalizedUnit) && gramsPerServing > 1))
+        ) {
+          return (quantity * unitToGrams[normalizedUnit]) / gramsPerServing;
+        }
+        return quantity;
+      };
+      const scaleValue = (value, multiplier) => {
         const numeric = Number(value || 0);
-        const scaled = numeric * quantity;
+        const scaled = numeric * multiplier;
         return Math.round(scaled * 100) / 100;
+      };
+      const selectedCandidate = () => {
+        const value = selectElement.value || "";
+        if (value.startsWith("external:")) {
+          const candidateIndex = Number(value.split(":")[1]);
+          return candidateGroups?.[reviewIndex]?.[candidateIndex] || null;
+        }
+        if (value.startsWith("food:")) {
+          const foodId = Number(value.split(":")[1]);
+          return candidateGroups?.[reviewIndex]?.find((candidate) => Number(candidate.food_id) === foodId) || null;
+        }
+        return null;
       };
 
       const updatePreview = () => {
         const value = selectElement.value || "";
         const quantity = quantityInput instanceof HTMLInputElement ? Math.max(Number(quantityInput.value || "1"), 0) : 1;
+        const unit = unitInput instanceof HTMLInputElement ? unitInput.value.trim() : "";
         if (quantityTextInput instanceof HTMLInputElement && quantityInput instanceof HTMLInputElement) {
           quantityTextInput.value = quantityInput.value;
         }
@@ -184,22 +294,20 @@
           macrosNode.textContent = "This line will be saved without macros so you can resolve it later.";
           return;
         }
-        if (!value.startsWith("external:")) {
-          return;
-        }
-        const candidateIndex = Number(value.split(":")[1]);
-        const candidate = candidateGroups?.[reviewIndex]?.[candidateIndex];
+        const candidate = selectedCandidate();
         if (!candidate) {
           return;
         }
+        const multiplier = reviewMultiplier(candidate, quantity, unit);
         sourceNode.textContent = sourceLabel(candidate);
         strategyNode.textContent = candidate.strategy || "";
-        servingNode.textContent = candidate.serving_description || "";
-        macrosNode.textContent = `${scaleValue(candidate.calories, quantity)} kcal · P ${scaleValue(candidate.protein_g, quantity)} · C ${scaleValue(candidate.carbs_g, quantity)} · F ${scaleValue(candidate.fat_g, quantity)}`;
+        servingNode.textContent = reviewServingLabel(unit, candidate.serving_description);
+        macrosNode.textContent = `${scaleValue(candidate.calories, multiplier)} kcal · P ${scaleValue(candidate.protein_g, multiplier)} · C ${scaleValue(candidate.carbs_g, multiplier)} · F ${scaleValue(candidate.fat_g, multiplier)}`;
       };
 
       selectElement.addEventListener("change", updatePreview);
       quantityInput?.addEventListener("input", updatePreview);
+      unitInput?.addEventListener("input", updatePreview);
       selectElement.addEventListener("keyup", (event) => {
         if (event.key !== "Enter") {
           return;

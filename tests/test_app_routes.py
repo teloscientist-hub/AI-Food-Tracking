@@ -25,6 +25,53 @@ def test_main_pages_render_and_expose_primary_navigation(client) -> None:
     assert 'name="body_fat_pct"' in body
 
 
+def test_parser_forms_show_submit_progress_state(client) -> None:
+    for path in ["/", "/log"]:
+        response = client.get(path)
+        assert response.status_code == 200
+        assert 'action="/log/review"' in response.text
+        assert "data-loading-submit" in response.text
+        assert 'data-loading-label="Parsing..."' in response.text
+        assert "data-loading-status" in response.text
+        assert "Parsing and matching foods..." in response.text
+
+
+def test_review_page_keeps_parsed_weight_unit_independent_of_recent_picker_amount(client, session) -> None:
+    chicken = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Chicken Breast",
+            serving_description="1 breast",
+            grams_per_serving=170,
+            calories=280,
+            protein_g=52,
+            carbs_g=0,
+            fat_g=6,
+        ),
+    )
+    assert chicken.id
+
+    response = client.post(
+        "/log/review",
+        data={
+            "raw_input_text": "9 oz chicken breast",
+            "meal_label": "Dinner",
+            "logged_at": "2026-05-27T18:00",
+            "redirect_to": "/log",
+        },
+    )
+
+    assert response.status_code == 200
+    assert 'value="9.0"' in response.text
+    assert 'name="unit_0"' in response.text
+    assert 'value="oz"' in response.text
+    assert "data-preview-serving>1 oz</strong>" in response.text
+    assert 'data-unit-input="0"' in response.text
+    assert "grams_per_serving" in response.text
+    assert "reviewServingLabel" in response.text
+    assert "reviewMultiplier" in response.text
+
+
 def test_settings_macro_summary_uses_net_carbs_calories(client) -> None:
     response = client.get("/settings")
 
@@ -389,6 +436,86 @@ def test_log_picker_add_preserves_current_page_order_until_fresh_visit(client, s
     assert fresh_page.text.index(f'aria-label="Add {logged_food.canonical_name}"') < fresh_page.text.index(f'aria-label="Add {first_name}"')
 
 
+def test_daily_log_submit_moves_food_to_top_on_fresh_picker_visit(client, session) -> None:
+    older = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Alpha Earlier Daily Log Snack",
+            serving_description="1 serving",
+            grams_per_serving=1,
+            calories=100,
+            protein_g=10,
+            carbs_g=5,
+            fat_g=3,
+        ),
+    )
+    recent = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Zulu Protein Drink Added From Daily Log",
+            serving_description="1 serving",
+            grams_per_serving=1,
+            calories=160,
+            protein_g=30,
+            carbs_g=5,
+            fat_g=3,
+        ),
+    )
+    food_created_at = datetime(2026, 5, 1, 8, 0)
+    for food in [older, recent]:
+        food.created_at = food_created_at
+        food.updated_at = food_created_at
+
+    shared_logged_at = datetime(2026, 5, 25, 12, 0)
+    older_used_at = datetime(2026, 5, 25, 18, 0)
+    older_entry = MealEntry(
+        raw_input_text="older snack",
+        meal_label="Snack 1",
+        logged_at=shared_logged_at,
+        created_at=older_used_at,
+    )
+    session.add(older_entry)
+    session.flush()
+    session.add(
+        MealEntryItem(
+            meal_entry_id=older_entry.id,
+            food_id=older.id,
+            parsed_phrase=older.canonical_name,
+            normalized_phrase=older.normalized_name,
+            quantity=1.0,
+            unit="serving",
+            created_at=older_used_at,
+        )
+    )
+    session.commit()
+
+    submit_response = client.post(
+        "/log/submit",
+        data={
+            "raw_input_text": "protein drink",
+            "meal_label": "Snack 1",
+            "logged_at": shared_logged_at.isoformat(timespec="minutes"),
+            "item_count": "1",
+            "candidate_json": json.dumps([[]]),
+            "parsed_phrase_0": recent.canonical_name,
+            "quantity_0": "1",
+            "unit_0": "serving",
+            "quantity_text_0": "1",
+            "selected_food_id_0": f"food:{recent.id}",
+        },
+        follow_redirects=False,
+    )
+    assert submit_response.status_code == 303
+
+    for path in ["/log", "/log/picker", "/log?q=daily+log&source=all", "/log/picker?q=daily+log&source=all"]:
+        fresh_page = client.get(path)
+
+        assert fresh_page.status_code == 200
+        recent_position = fresh_page.text.index(f'aria-label="Add {recent.canonical_name}"')
+        older_position = fresh_page.text.index(f'aria-label="Add {older.canonical_name}"')
+        assert recent_position < older_position
+
+
 def test_log_picker_renders_native_serving_quantity_for_count_units(client, session) -> None:
     create_food(
         session,
@@ -410,6 +537,29 @@ def test_log_picker_renders_native_serving_quantity_for_count_units(client, sess
     assert 'data-native-unit="spears"' in response.text
     assert 'name="quantity" value="10.0"' in response.text
     assert '<option value="spears" selected>spears</option>' in response.text
+
+
+def test_log_picker_renders_native_serving_quantity_for_leading_decimal_units(client, session) -> None:
+    create_food(
+        session,
+        FoodCreate(
+            canonical_name="Salad Creamy Italian",
+            serving_description=".33 bag",
+            grams_per_serving=1,
+            calories=150,
+            protein_g=3,
+            carbs_g=8,
+            fat_g=12,
+        ),
+    )
+
+    response = client.get("/log?q=salad+creamy+italian&source=custom")
+
+    assert response.status_code == 200
+    assert 'data-native-serving-quantity="0.33"' in response.text
+    assert 'data-native-unit="bag"' in response.text
+    assert 'name="quantity" value="0.33"' in response.text
+    assert '<option value="bag" selected>bag</option>' in response.text
 
 
 def _picker_quantity_value_for_food(body: str, food_id: int) -> str:
@@ -461,6 +611,9 @@ def test_log_picker_plus_keeps_submitted_quantity_after_merge(client, session) -
         item = session.query(MealEntryItem).filter_by(food_id=food.id, unit="serving").one()
         assert item.quantity == expected_quantity
 
+    fresh_page = client.get("/log?q=Repeat+Plus&source=custom")
+    assert _picker_quantity_value_for_food(fresh_page.text, food.id) == "1.0"
+
 
 def test_log_picker_add_merges_same_food_and_unit(client, session) -> None:
     food = create_food(
@@ -499,7 +652,7 @@ def test_log_picker_add_merges_same_food_and_unit(client, session) -> None:
     item = items[0]
     assert item.quantity == 5.0
     assert item.unit == "serving"
-    assert item.quantity_text == "5"
+    assert item.quantity_text == "3"
     assert item.calories_snapshot == 500.0
     assert item.protein_g_snapshot == 50.0
     assert item.net_carbs_g_snapshot == 10.0
@@ -587,6 +740,13 @@ def test_shared_layout_preserves_scroll_after_page_actions(client) -> None:
     assert 'input[name="redirect_to"]' in response.text
     assert "restorePageScroll();" in response.text
     assert "rememberFormScroll(mealMoveForm);" in response.text
+    assert 'document.querySelectorAll("form[data-loading-submit]")' in response.text
+    assert 'form.classList.add("is-submitting")' in response.text
+    assert "submitButton.disabled = true;" in response.text
+    assert 'quantityInput?.addEventListener("keydown", (event) => {' in response.text
+    assert 'event.key !== "Enter"' in response.text
+    assert "event.stopPropagation();" in response.text
+    assert "quantityInput.blur();" in response.text
 
     foods = client.get("/foods")
     assert foods.status_code == 200

@@ -200,6 +200,140 @@ def test_serving_multiplier_converts_unit_weight_against_serving_size(session) -
     assert round(serving_multiplier(2.0, "oz", butter), 2) == round((2.0 * 28.3495) / 14, 2)
 
 
+def test_serving_multiplier_converts_parsed_weight_for_count_based_food(session) -> None:
+    chicken = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Chicken Breast",
+            serving_description="1 breast",
+            grams_per_serving=170,
+            calories=280,
+            protein_g=52,
+            carbs_g=0,
+            fat_g=6,
+        ),
+    )
+
+    assert round(serving_multiplier(9.0, "oz", chicken), 4) == round((9.0 * 28.3495) / 170, 4)
+
+
+def test_serving_multiplier_prefers_native_weight_unit_over_stale_grams(session) -> None:
+    bacon = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Bacon",
+            serving_description="1 slice",
+            grams_per_serving=8,
+            calories=43,
+            protein_g=3,
+            carbs_g=0.1,
+            fat_g=3.3,
+        ),
+    )
+    bacon.serving_description = "1 oz"
+    bacon.grams_per_serving = 8
+
+    assert serving_multiplier(1.0, "oz", bacon) == 1.0
+    assert serving_multiplier(2.0, "oz", bacon) == 2.0
+    assert round(serving_multiplier(28.3495, "g", bacon), 4) == 1.0
+
+
+def test_save_meal_uses_parsed_weight_instead_of_previous_logged_amount(session) -> None:
+    chicken = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Chicken Breast",
+            serving_description="1 breast",
+            grams_per_serving=170,
+            calories=280,
+            protein_g=52,
+            carbs_g=0,
+            fat_g=6,
+        ),
+    )
+    LoggingService().save_meal(
+        session,
+        LogMealRequest(
+            raw_input_text="6 oz chicken breast",
+            meal_label="Dinner",
+            items=[
+                LogReviewItem(
+                    parsed_phrase="chicken breast",
+                    quantity=6,
+                    unit="oz",
+                    quantity_text="6",
+                    selected_food_id=chicken.id,
+                )
+            ],
+        ),
+    )
+
+    meal = LoggingService().save_meal(
+        session,
+        LogMealRequest(
+            raw_input_text="9 oz chicken breast",
+            meal_label="Dinner",
+            items=[
+                LogReviewItem(
+                    parsed_phrase="chicken breast",
+                    quantity=9,
+                    unit="oz",
+                    quantity_text="9",
+                    selected_food_id=chicken.id,
+                )
+            ],
+        ),
+    )
+
+    item = meal.items[0]
+    assert item.quantity == 9
+    assert item.unit == "oz"
+    assert item.quantity_text == "9"
+    assert item.grams_per_serving_snapshot == round(9 * 28.3495, 2)
+    assert item.calories_snapshot == round(280 * ((9 * 28.3495) / 170), 2)
+
+
+def test_save_meal_uses_custom_food_note_serving_equivalence(session) -> None:
+    bacon = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Bacon",
+            serving_description="1 oz",
+            grams_per_serving=1,
+            calories=132,
+            protein_g=9.6,
+            carbs_g=0.5,
+            fat_g=9.9,
+            notes="Three pieces of bacon typically equals one ounce.",
+            aliases=["bacon"],
+        ),
+    )
+
+    meal = LoggingService().save_meal(
+        session,
+        LogMealRequest(
+            raw_input_text="three pieces of bacon",
+            meal_label="Breakfast",
+            items=[
+                LogReviewItem(
+                    parsed_phrase="bacon",
+                    quantity=3,
+                    unit="pieces",
+                    quantity_text="three",
+                    selected_food_id=bacon.id,
+                )
+            ],
+        ),
+    )
+
+    item = meal.items[0]
+    assert item.quantity == 3
+    assert item.unit == "pieces"
+    assert item.grams_per_serving_snapshot == 28.35
+    assert item.calories_snapshot == 132.0
+    assert item.protein_g_snapshot == 9.6
+
+
 def test_serving_multiplier_uses_derived_weighted_serving_size(session) -> None:
     yogurt = create_food(
         session,

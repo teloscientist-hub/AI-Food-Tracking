@@ -14,14 +14,14 @@ Important scope note:
 ## Test Configuration
 
 Project test configuration lives in:
-- [`/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking/pyproject.toml`](/Users/mark/Documents/Documents%20-%20mark’s%20Mac%20Studio/_GPT%20Meta/App%20Development/mml-food-tracking/pyproject.toml)
+- [`/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking/pyproject.toml`](/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark%20lewis/_GPT%20Meta/App%20Development/AI-Food-Tracking/pyproject.toml)
 
 Pytest is configured to:
 - use `tests/` as the test root
 - add the project root to `pythonpath`
 
 Shared fixtures live in:
-- [`/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking/tests/conftest.py`](/Users/mark/Documents/Documents%20-%20mark’s%20Mac%20Studio/_GPT%20Meta/App%20Development/mml-food-tracking/tests/conftest.py)
+- [`/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking/tests/conftest.py`](/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark%20lewis/_GPT%20Meta/App%20Development/AI-Food-Tracking/tests/conftest.py)
 
 Those fixtures provide:
 - an in-memory SQLite database for each test
@@ -33,7 +33,7 @@ Those fixtures provide:
 
 ### `tests/test_parser.py`
 File:
-- [`/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking/tests/test_parser.py`](/Users/mark/Documents/Documents%20-%20mark’s%20Mac%20Studio/_GPT%20Meta/App%20Development/mml-food-tracking/tests/test_parser.py)
+- [`/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking/tests/test_parser.py`](/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark%20lewis/_GPT%20Meta/App%20Development/AI-Food-Tracking/tests/test_parser.py)
 
 What it tests:
 - conversational parsing of quantities and food phrases
@@ -48,7 +48,7 @@ What it tests:
 
 ### `tests/test_resolution.py`
 File:
-- [`/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking/tests/test_resolution.py`](/Users/mark/Documents/Documents%20-%20mark’s%20Mac%20Studio/_GPT%20Meta/App%20Development/mml-food-tracking/tests/test_resolution.py)
+- [`/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking/tests/test_resolution.py`](/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark%20lewis/_GPT%20Meta/App%20Development/AI-Food-Tracking/tests/test_resolution.py)
 
 What it tests:
 - exact custom alias resolution
@@ -66,7 +66,7 @@ This file is the core safeguard for search priority logic.
 
 ### `tests/test_off_client.py`
 File:
-- [`/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking/tests/test_off_client.py`](/Users/mark/Documents/Documents%20-%20mark’s%20Mac%20Studio/_GPT%20Meta/App%20Development/mml-food-tracking/tests/test_off_client.py)
+- [`/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking/tests/test_off_client.py`](/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark%20lewis/_GPT%20Meta/App%20Development/AI-Food-Tracking/tests/test_off_client.py)
 
 What it tests:
 - Open Food Facts nutriment parsing from serving-based payloads
@@ -81,7 +81,7 @@ What it tests:
 
 ### `tests/test_logging_service.py`
 File:
-- [`/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking/tests/test_logging_service.py`](/Users/mark/Documents/Documents%20-%20mark’s%20Mac%20Studio/_GPT%20Meta/App%20Development/mml-food-tracking/tests/test_logging_service.py)
+- [`/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking/tests/test_logging_service.py`](/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark%20lewis/_GPT%20Meta/App%20Development/AI-Food-Tracking/tests/test_logging_service.py)
 
 What it tests:
 - saving meals with a mix of resolved and unresolved items
@@ -93,7 +93,7 @@ What it tests:
 
 ### `tests/test_food_service.py`
 File:
-- [`/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking/tests/test_food_service.py`](/Users/mark/Documents/Documents%20-%20mark’s%20Mac%20Studio/_GPT%20Meta/App%20Development/mml-food-tracking/tests/test_food_service.py)
+- [`/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking/tests/test_food_service.py`](/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark%20lewis/_GPT%20Meta/App%20Development/AI-Food-Tracking/tests/test_food_service.py)
 
 What it tests:
 - creating foods with aliases and custom metadata
@@ -108,7 +108,7 @@ This is the main service-layer coverage for the food library and custom-food lif
 
 ### `tests/test_picker_foods.py`
 File:
-- [`/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking/tests/test_picker_foods.py`](/Users/mark/Documents/Documents%20-%20mark’s%20Mac%20Studio/_GPT%20Meta/App%20Development/mml-food-tracking/tests/test_picker_foods.py)
+- [`/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking/tests/test_picker_foods.py`](/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark%20lewis/_GPT%20Meta/App%20Development/AI-Food-Tracking/tests/test_picker_foods.py)
 
 What it tests:
 - picker ordering by recent logged foods
@@ -120,7 +120,7 @@ What it tests:
 
 ### `tests/test_summary_service.py`
 File:
-- [`/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking/tests/test_summary_service.py`](/Users/mark/Documents/Documents%20-%20mark’s%20Mac%20Studio/_GPT%20Meta/App%20Development/mml-food-tracking/tests/test_summary_service.py)
+- [`/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking/tests/test_summary_service.py`](/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark%20lewis/_GPT%20Meta/App%20Development/AI-Food-Tracking/tests/test_summary_service.py)
 
 What it tests:
 - daily macro/calorie totals
@@ -137,7 +137,7 @@ What it tests:
 
 ### `tests/test_web_submit.py`
 File:
-- [`/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking/tests/test_web_submit.py`](/Users/mark/Documents/Documents%20-%20mark’s%20Mac%20Studio/_GPT%20Meta/App%20Development/mml-food-tracking/tests/test_web_submit.py)
+- [`/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking/tests/test_web_submit.py`](/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark%20lewis/_GPT%20Meta/App%20Development/AI-Food-Tracking/tests/test_web_submit.py)
 
 What it tests:
 - parsing selected food values from the review form
@@ -151,7 +151,7 @@ What it tests:
 
 ### `tests/test_app_routes.py`
 File:
-- [`/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking/tests/test_app_routes.py`](/Users/mark/Documents/Documents%20-%20mark’s%20Mac%20Studio/_GPT%20Meta/App%20Development/mml-food-tracking/tests/test_app_routes.py)
+- [`/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking/tests/test_app_routes.py`](/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark%20lewis/_GPT%20Meta/App%20Development/AI-Food-Tracking/tests/test_app_routes.py)
 
 What it tests:
 - primary page rendering for:
@@ -224,7 +224,7 @@ The suite currently passes with one warning:
 - SQLAlchemy warns that a delete expected to affect one row affected zero rows
 
 Current location:
-- [`/Users/mark/Documents/Documents - MML Mac Studio/_GPT Meta/App Development/mml-food-tracking/app/routers/web.py`](/Users/mark/Documents/Documents%20-%20mark’s%20Mac%20Studio/_GPT%20Meta/App%20Development/mml-food-tracking/app/routers/web.py)
+- [`/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking/app/routers/web.py`](/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark%20lewis/_GPT%20Meta/App%20Development/AI-Food-Tracking/app/routers/web.py)
 
 This warning does not currently fail the suite, but it should be cleaned up.
 

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title or "MML Food Tracking" }}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='app-icon.svg') }}">
-  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v=20260512f">
+  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v=20260527a">
 </head>
 <body>
   <div class="page-shell">
@@ -46,6 +46,18 @@
         return cleaned.slice(0, -1);
       }
       return cleaned;
+    };
+    const pickerUnitsMatch = (left, right) => Boolean(normalizePickerUnit(left)) && normalizePickerUnit(left) === normalizePickerUnit(right);
+    const parsePickerEquivalences = (value) => {
+      if (!value) {
+        return [];
+      }
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (error) {
+        return [];
+      }
     };
 
     const MML_SCROLL_RESTORE_KEY = "mml-food-tracking:scroll-restore";
@@ -144,6 +156,28 @@
       form.addEventListener("submit", () => rememberFormScroll(form));
     });
 
+    document.querySelectorAll("form[data-loading-submit]").forEach((form) => {
+      form.addEventListener("submit", () => {
+        if (!(form instanceof HTMLFormElement) || form.dataset.submitting === "true") {
+          return;
+        }
+        form.dataset.submitting = "true";
+        form.classList.add("is-submitting");
+        form.setAttribute("aria-busy", "true");
+
+        const status = form.querySelector("[data-loading-status]");
+        if (status instanceof HTMLElement) {
+          status.hidden = false;
+        }
+
+        const submitButton = form.querySelector('button[type="submit"][data-loading-label]');
+        if (submitButton instanceof HTMLButtonElement) {
+          submitButton.textContent = submitButton.dataset.loadingLabel || "Working...";
+          submitButton.disabled = true;
+        }
+      });
+    });
+
     document.addEventListener("click", (event) => {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
         return;
@@ -193,11 +227,51 @@
       const gramsPerServing = parseFloat(form.dataset.gramsPerServing || "0") || 0;
       const nativeServingQuantity = parseFloat(form.dataset.nativeServingQuantity || "0") || 0;
       const nativeUnit = form.dataset.nativeUnit || "";
+      const servingEquivalences = parsePickerEquivalences(form.dataset.servingEquivalences || "");
+
+      const factorForQuantityUnit = (amount, amountUnit) => {
+        if (nativeServingQuantity > 0 && pickerUnitsMatch(amountUnit, nativeUnit)) {
+          return amount / nativeServingQuantity;
+        }
+        const normalizedUnit = (amountUnit || "").toLowerCase();
+        if (normalizedUnit in PICKER_UNIT_TO_GRAMS && gramsPerServing > 0) {
+          return (amount * PICKER_UNIT_TO_GRAMS[normalizedUnit]) / gramsPerServing;
+        }
+        return null;
+      };
+
+      const factorFromServingEquivalence = () => {
+        for (const equivalence of servingEquivalences) {
+          const sourceQuantity = Number(equivalence.sourceQuantity || 0);
+          const targetQuantity = Number(equivalence.targetQuantity || 0);
+          if (sourceQuantity <= 0 || targetQuantity <= 0) {
+            continue;
+          }
+          if (pickerUnitsMatch(unit, equivalence.sourceUnit)) {
+            const factor = factorForQuantityUnit((quantity / sourceQuantity) * targetQuantity, equivalence.targetUnit);
+            if (factor !== null) {
+              return factor;
+            }
+          }
+          if (pickerUnitsMatch(unit, equivalence.targetUnit)) {
+            const factor = factorForQuantityUnit((quantity / targetQuantity) * sourceQuantity, equivalence.sourceUnit);
+            if (factor !== null) {
+              return factor;
+            }
+          }
+        }
+        return null;
+      };
+
       let multiplier = quantity;
-      if (unit in PICKER_UNIT_TO_GRAMS && gramsPerServing > 0) {
-        multiplier = (quantity * PICKER_UNIT_TO_GRAMS[unit]) / gramsPerServing;
-      } else if (nativeServingQuantity > 0 && normalizePickerUnit(unit) === normalizePickerUnit(nativeUnit)) {
-        multiplier = quantity / nativeServingQuantity;
+      const nativeFactor = factorForQuantityUnit(quantity, unit);
+      if (nativeFactor !== null) {
+        multiplier = nativeFactor;
+      } else {
+        const equivalenceFactor = factorFromServingEquivalence();
+        if (equivalenceFactor !== null) {
+          multiplier = equivalenceFactor;
+        }
       }
 
       const baseNetCarbs = parseFloat(form.dataset.baseNetCarbs || "0") || 0;
@@ -230,6 +304,15 @@
       updatePickerRowPreview(form);
       quantityInput?.addEventListener("input", () => updatePickerRowPreview(form));
       quantityInput?.addEventListener("change", () => updatePickerRowPreview(form));
+      quantityInput?.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        updatePickerRowPreview(form);
+        quantityInput.blur();
+      });
       unitSelect?.addEventListener("change", () => updatePickerRowPreview(form));
       form.addEventListener("submit", () => {
         const scrollInput = form.querySelector('input[name="picker_scroll_y"]');

@@ -15,6 +15,24 @@ def test_parse_entry_handles_quantities_units_and_brands() -> None:
     assert items[3].phrase == "butter"
 
 
+def test_parse_entry_handles_piece_units_written_as_words() -> None:
+    items = parse_entry("three pieces of bacon")
+
+    assert len(items) == 1
+    assert items[0].quantity == 3
+    assert items[0].unit == "pieces"
+    assert items[0].phrase == "bacon"
+
+
+def test_parse_entry_handles_bag_units_with_leading_decimal() -> None:
+    items = parse_entry(".33 bag salad creamy italian")
+
+    assert len(items) == 1
+    assert items[0].quantity == 0.33
+    assert items[0].unit == "bag"
+    assert items[0].phrase == "salad creamy italian"
+
+
 def test_parse_entry_defaults_to_single_serving_for_natural_language() -> None:
     items = parse_entry("protein coffee and my yogurt bowl")
 

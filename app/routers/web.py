@@ -20,13 +20,16 @@ from app.schemas.logging import LogMealRequest, LogReviewItem
 from app.services.food_service import (
     _food_image_url,
     create_food,
+    effective_grams_per_serving,
     food_to_read,
     get_food_library_cards,
     get_picker_foods,
     get_food,
+    notes_for_food,
     remove_custom_food_from_library,
     search_foods,
     serving_description_amount_unit,
+    serving_equivalence_units,
     update_food,
 )
 from app.services.food_icons import ICON_LIBRARY
@@ -298,7 +301,7 @@ def _native_serving_unit_label(serving_description: str | None) -> str | None:
     return serving_description.strip().lower()
 
 
-def _detail_unit_options(serving_description: str | None) -> list[dict[str, str]]:
+def _detail_unit_options(serving_description: str | None, notes: str | None = None) -> list[dict[str, str]]:
     options: list[dict[str, str]] = []
     seen: set[str] = set()
 
@@ -312,6 +315,8 @@ def _detail_unit_options(serving_description: str | None) -> list[dict[str, str]
         options.append({"value": cleaned, "label": label or cleaned})
 
     add(_native_serving_unit_label(serving_description))
+    for unit in serving_equivalence_units(notes):
+        add(unit)
     add("g", "grams")
     add("oz", "oz")
     return options
@@ -332,6 +337,8 @@ def _item_unit_options(food: Food | None, current_unit: str | None) -> list[dict
 
     add(current_unit)
     add(_native_serving_unit_label(food.serving_description) if food else None)
+    for unit in serving_equivalence_units(notes_for_food(food) if food else None):
+        add(unit)
     add("g", "grams")
     add("oz", "oz")
     return options
@@ -413,7 +420,7 @@ def _get_or_create_target_meal_entry(session: Session, target_date: date, meal_l
 def _apply_food_snapshots(item: MealEntryItem, food: Food, quantity: float, unit: str | None) -> None:
     factor = serving_multiplier(quantity, unit, food)
     item.serving_description_snapshot = food.serving_description
-    item.grams_per_serving_snapshot = multiply_value(food.grams_per_serving, factor)
+    item.grams_per_serving_snapshot = multiply_value(effective_grams_per_serving(food), factor)
     item.calories_snapshot = multiply_value(food.calories, factor) or 0.0
     item.protein_g_snapshot = multiply_value(food.protein_g, factor) or 0.0
     item.carbs_g_snapshot = multiply_value(food.carbs_g, factor) or 0.0
@@ -455,7 +462,7 @@ def _merge_or_add_picker_item(
         primary = existing_items[0]
         duplicate_entry_ids = [item.meal_entry_id for item in existing_items[1:]]
         primary.quantity = round(sum(item.quantity for item in existing_items) + quantity, 6)
-        primary.quantity_text = f"{primary.quantity:g}"
+        primary.quantity_text = f"{quantity:g}"
         primary.parsed_phrase = food.canonical_name
         primary.normalized_phrase = food.normalized_name
         primary.resolution_status = "resolved"
@@ -1343,13 +1350,14 @@ def food_detail(
     if not food:
         raise HTTPException(status_code=404, detail="Food not found")
     serving_measure = serving_description_amount_unit(food.serving_description)
+    food_read = food_to_read(session, food)
     return templates.TemplateResponse(
         request,
         "food_detail.html",
         {
-            "food": food_to_read(session, food),
+            "food": food_read,
             "meal_options": MEAL_OPTIONS,
-            "unit_options": _detail_unit_options(food.serving_description),
+            "unit_options": _detail_unit_options(food.serving_description, food_read.notes),
             "native_quantity": serving_measure[0] if serving_measure else 1.0,
         },
     )
@@ -1558,7 +1566,7 @@ def save_meal_item_edit(
         food = session.get(Food, item.food_id)
         if food:
             factor = serving_multiplier(quantity, item.unit, food)
-            item.grams_per_serving_snapshot = multiply_value(food.grams_per_serving, factor)
+            item.grams_per_serving_snapshot = multiply_value(effective_grams_per_serving(food), factor)
             item.calories_snapshot = multiply_value(food.calories, factor) or 0.0
             item.protein_g_snapshot = multiply_value(food.protein_g, factor) or 0.0
             item.carbs_g_snapshot = multiply_value(food.carbs_g, factor) or 0.0

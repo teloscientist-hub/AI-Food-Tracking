@@ -34,6 +34,7 @@ class ResolutionCandidate:
     confidence: float
     strategy: str
     serving_description: str
+    grams_per_serving: float
     calories: float
     protein_g: float
     carbs_g: float
@@ -482,6 +483,7 @@ class FoodResolver:
                 confidence=max(0.0, food.score - (search_index * 0.03)),
                 strategy=strategy if search_index == 0 else f"{strategy}_variant",
                 serving_description=food.serving_description,
+                grams_per_serving=food.grams_per_serving,
                 calories=food.calories,
                 protein_g=food.protein_g,
                 carbs_g=food.carbs_g,
@@ -503,6 +505,7 @@ class FoodResolver:
             confidence=confidence,
             strategy=strategy,
             serving_description=food.serving_description,
+            grams_per_serving=food.grams_per_serving,
             calories=food.calories,
             protein_g=food.protein_g,
             carbs_g=food.carbs_g,

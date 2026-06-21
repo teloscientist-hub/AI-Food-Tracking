@@ -6,7 +6,14 @@ from sqlalchemy.orm import Session
 
 from app.models import Food, FoodAlias, FoodResolutionHistory, MealEntry, MealEntryItem
 from app.schemas.logging import LogMealRequest
-from app.services.food_service import _source_payload_image_url, create_food, serving_description_amount_unit, serving_unit_matches
+from app.services.food_service import (
+    _source_payload_image_url,
+    create_food,
+    effective_grams_per_serving,
+    serving_description_amount_unit,
+    serving_equivalence_multiplier,
+    serving_unit_matches,
+)
 from app.services.nutrition import derive_net_carbs
 from app.services.parser import ParsedFoodItem, parse_entry, normalize_text
 from app.services.resolution import FoodResolver, ResolutionResult
@@ -36,19 +43,43 @@ UNIT_TO_GRAMS = {
     "cups": 240.0,
 }
 
+MASS_UNITS = {
+    "g",
+    "gram",
+    "grams",
+    "oz",
+    "ounce",
+    "ounces",
+    "lb",
+    "lbs",
+}
+
 
 def serving_multiplier(quantity: float, unit: str | None, food: Food) -> float:
     if not unit:
         return quantity
-    normalized = unit.lower()
-    if normalized in UNIT_TO_GRAMS and food.grams_per_serving and food.grams_per_serving > 0:
-        grams = quantity * UNIT_TO_GRAMS[normalized]
-        return grams / food.grams_per_serving
+    normalized = unit.strip().lower()
     serving_measure = serving_description_amount_unit(food.serving_description)
+    serving_is_weight_based = bool(serving_measure and serving_measure[1] in UNIT_TO_GRAMS)
+    grams_per_serving = effective_grams_per_serving(food)
+
     if serving_measure and serving_unit_matches(normalized, serving_measure[1]):
         serving_quantity, _ = serving_measure
         if serving_quantity > 0:
             return quantity / serving_quantity
+    note_multiplier = serving_equivalence_multiplier(quantity, normalized, food)
+    if note_multiplier is not None:
+        return note_multiplier
+    if (
+        normalized in UNIT_TO_GRAMS
+        and (
+            serving_is_weight_based
+            or (normalized in MASS_UNITS and grams_per_serving > 1.0)
+        )
+        and grams_per_serving > 0
+    ):
+        grams = quantity * UNIT_TO_GRAMS[normalized]
+        return grams / grams_per_serving
     return quantity
 
 
@@ -164,7 +195,7 @@ class LoggingService:
             if not food:
                 raise ValueError(f"Food {item.selected_food_id} not found")
             multiplier = serving_multiplier(item.quantity, item.unit, food)
-            grams_snapshot = multiply_value(food.grams_per_serving, multiplier)
+            grams_snapshot = multiply_value(effective_grams_per_serving(food), multiplier)
             calories_snapshot = multiply_value(food.calories, multiplier) or 0.0
             protein_snapshot = multiply_value(food.protein_g, multiplier) or 0.0
             carbs_snapshot = multiply_value(food.carbs_g, multiplier) or 0.0

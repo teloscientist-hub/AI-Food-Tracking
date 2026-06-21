@@ -129,18 +129,27 @@ The app auto-creates the SQLite database and seeds demo foods on startup.
 
 ## Run as a Mac App
 
-For day-to-day use on macOS, build the local app wrapper:
+For day-to-day use on macOS, install the local app wrapper into your Applications folder and enable login auto-start:
+
+```bash
+./Scripts/install_mac_app.sh
+open "/Applications/MML Food Tracking.app"
+```
+
+By default this installs to `/Applications/MML Food Tracking.app` when that folder is writable, otherwise `~/Applications/MML Food Tracking.app`. It also creates `~/Library/LaunchAgents/local.mml-food-tracking.plist`. The login item starts the local FastAPI server quietly at sign-in; double-clicking the app opens the browser to the app. You can move the app between `~/Applications` and `/Applications`; the login launcher checks both locations. To install directly somewhere else, run for example `APP_INSTALL_DIR="$HOME/Applications" ./Scripts/install_mac_app.sh`.
+
+For development-only use, you can still build the wrapper without installing it:
 
 ```bash
 ./Scripts/package_app.sh
 open ".build/MML Food Tracking.app"
 ```
 
-The wrapper creates or reuses `.venv`, installs the app dependencies, starts the FastAPI server on `127.0.0.1:8765`, and opens the browser automatically. It is intentionally a local wrapper around this checkout, not a standalone redistributable binary. If you move the repo, rerun `./Scripts/package_app.sh`.
+The wrapper creates or reuses `.venv`, installs the app dependencies, starts the FastAPI server on `127.0.0.1:8787`, and opens the browser automatically unless launched with `--server-only` by the login item. It is intentionally a local wrapper around this checkout, not a standalone redistributable binary. If you move the repo, rerun `./Scripts/install_mac_app.sh`.
 
 The wrapper stores its user database at `~/Library/Application Support/MML Food Tracking/mml_food_tracking.db` and writes startup logs to `~/Library/Logs/MML Food Tracking/server.log`. On first launch only, it will copy `mml_food_tracking.db` from the repo if that file exists locally; cloned repos normally start with a fresh database and seed data.
 
-To share the app with another Mac user, have them clone the repository, install Python 3.12+, run `./Scripts/package_app.sh`, and open `.build/MML Food Tracking.app`. Each user keeps their own private SQLite database, `.env`, and virtual environment outside of git.
+To share the app with another Mac user, have them clone the repository, install Python 3.12+, run `./Scripts/install_mac_app.sh`, and open the installed `MML Food Tracking.app`. Each user keeps their own private SQLite database, `.env`, and virtual environment outside of git.
 
 ## Test Instructions
 
@@ -172,4 +181,3 @@ The test suite covers the parser and the resolution order logic with mocked exte
 - authentication and multi-user support
 - Alembic migration history instead of startup `create_all`
 - richer charts with client-side interactivity
-

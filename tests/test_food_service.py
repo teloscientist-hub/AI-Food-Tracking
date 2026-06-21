@@ -7,9 +7,13 @@ from app.services.food_service import (
     food_to_read,
     get_food_library_cards,
     remove_custom_food_from_library,
+    repair_weight_based_serving_sizes,
     search_foods,
     serving_description_amount_unit,
     serving_description_grams,
+    serving_equivalence_multiplier,
+    serving_equivalence_units,
+    serving_equivalences_from_notes,
     update_food,
 )
 
@@ -51,6 +55,7 @@ def test_serving_description_amount_unit_reads_native_serving_counts() -> None:
     assert serving_description_amount_unit("10 spears") == (10.0, "spears")
     assert serving_description_amount_unit("1 spear") == (1.0, "spear")
     assert serving_description_amount_unit("1/2 package") == (0.5, "package")
+    assert serving_description_amount_unit(".33 bag") == (0.33, "bag")
     assert serving_description_amount_unit("8 oz steak") == (8.0, "oz")
 
 
@@ -60,6 +65,27 @@ def test_serving_description_grams_handles_fractional_weight_text() -> None:
     assert serving_description_grams("1/2 Ounce") == round(0.5 * 28.3495, 4)
     assert serving_description_grams("5-1/2 Ounces") == round(5.5 * 28.3495, 4)
     assert serving_description_grams("3/4 Ounce") == round(0.75 * 28.3495, 4)
+
+
+def test_serving_equivalences_from_notes_reads_piece_to_ounce_rule() -> None:
+    equivalences = serving_equivalences_from_notes("Three pieces of bacon typically equals one ounce.")
+
+    assert len(equivalences) == 1
+    assert equivalences[0].source_quantity == 3
+    assert equivalences[0].source_unit == "pieces"
+    assert equivalences[0].target_quantity == 1
+    assert equivalences[0].target_unit == "oz"
+    assert serving_equivalence_units("Three pieces of bacon typically equals one ounce.") == ["pieces", "oz"]
+
+
+def test_serving_equivalences_from_notes_reads_for_wording() -> None:
+    notes = "1 piece is typically about 0.33 to 0.5 oz - regular size - .33 or 3 pieces for 1 oz"
+    equivalences = serving_equivalences_from_notes(notes)
+
+    assert equivalences[-1].source_quantity == 3
+    assert equivalences[-1].source_unit == "pieces"
+    assert equivalences[-1].target_quantity == 1
+    assert equivalences[-1].target_unit == "oz"
 
 
 def test_create_food_derives_grams_per_serving_from_weighted_serving_description(session) -> None:
@@ -108,6 +134,77 @@ def test_update_food_derives_grams_per_serving_from_weighted_serving_description
     )
 
     assert updated.grams_per_serving == 190
+
+
+def test_update_food_derives_weight_when_hidden_grams_are_stale(session) -> None:
+    food = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Bacon",
+            serving_description="1 slice",
+            grams_per_serving=8,
+            calories=43,
+            protein_g=3,
+            carbs_g=0.1,
+            fat_g=3.3,
+        ),
+    )
+
+    updated = update_food(
+        session,
+        food.id,
+        FoodUpdate(
+            canonical_name="Bacon",
+            serving_description="1 oz",
+            grams_per_serving=8,
+            calories=132,
+            protein_g=9.6,
+            carbs_g=0.5,
+            fat_g=9.9,
+        ),
+    )
+
+    assert updated.grams_per_serving == 28.3495
+
+
+def test_repair_weight_based_serving_sizes_corrects_existing_stale_grams(session) -> None:
+    food = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Bacon",
+            serving_description="1 slice",
+            grams_per_serving=8,
+            calories=43,
+            protein_g=3,
+            carbs_g=0.1,
+            fat_g=3.3,
+        ),
+    )
+    food.serving_description = "1 oz"
+    food.grams_per_serving = 8
+    session.commit()
+
+    assert repair_weight_based_serving_sizes(session) == 1
+    assert food.grams_per_serving == 28.3495
+
+
+def test_serving_equivalence_multiplier_uses_custom_food_notes(session) -> None:
+    bacon = create_food(
+        session,
+        FoodCreate(
+            canonical_name="Bacon",
+            serving_description="1 oz",
+            grams_per_serving=1,
+            calories=132,
+            protein_g=9.6,
+            carbs_g=0.5,
+            fat_g=9.9,
+            notes="Three pieces of bacon typically equals one ounce.",
+        ),
+    )
+
+    assert serving_equivalence_multiplier(3, "pieces", bacon) == 1.0
+    assert serving_equivalence_multiplier(6, "pieces", bacon) == 2.0
 
 
 def test_update_food_versions_custom_food_and_replaces_aliases(session, monkeypatch) -> None:

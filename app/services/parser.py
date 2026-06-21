@@ -19,6 +19,8 @@ KNOWN_UNITS = {
     "containers",
     "bottle",
     "bottles",
+    "bag",
+    "bags",
     "package",
     "packages",
     "can",

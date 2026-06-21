@@ -81,6 +81,7 @@
         data-grams-per-serving="{{ food.grams_per_serving or 0 }}"
         data-native-serving-quantity="{{ item.native_quantity or 0 }}"
         data-native-unit="{{ item.native_unit or '' }}"
+        data-serving-equivalences='{{ item.serving_equivalences|tojson }}'
         data-base-net-carbs="{{ food_net_carbs(food) }}"
         data-base-protein="{{ food.protein_g }}"
         data-base-fat="{{ food.fat_g }}"

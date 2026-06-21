@@ -15,7 +15,7 @@ from app.routers.api_summary import router as summary_api_router
 from app.routers.web import router as web_router
 from app.routers.web import templates
 from app.services.food_icons import food_icon_symbol
-from app.services.food_service import seed_demo_data
+from app.services.food_service import repair_weight_based_serving_sizes, seed_demo_data
 
 
 @asynccontextmanager
@@ -23,6 +23,7 @@ async def lifespan(app: FastAPI):
     init_db()
     with session_scope() as session:
         seed_demo_data(session)
+        repair_weight_based_serving_sizes(session)
     yield
 
 
