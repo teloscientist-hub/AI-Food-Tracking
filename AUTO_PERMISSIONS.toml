@@ -1,7 +1,7 @@
 [meta]
 name = "mml-food-tracking auto permissions"
 version = 1
-project_root = "/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking"
+project_root = "/Users/mark/A/code/AI-Food-Tracking"
 last_updated = "2026-05-02"
 maintainer = "Codex + user"
 
@@ -16,7 +16,7 @@ project_file_creation_preapproved = true
 note = "This file is a project-local approval policy for Codex sessions. It guides the agent, but it does not override the Codex app's native approval system. If the app itself does not already have a matching persisted prefix approval, Codex may still prompt the user."
 
 [project_scope]
-root = "/Users/mark/Library/CloudStorage/Dropbox-BPTNB/mark lewis/_GPT Meta/App Development/AI-Food-Tracking"
+root = "/Users/mark/A/code/AI-Food-Tracking"
 editable_paths = ["app/**", "tests/**", "migrations/**", "README.md", ".env.example", "pyproject.toml", ".gitignore", "PERMISSION_LOG.md", "AUTO_PERMISSIONS.toml", "AGENTS.md"]
 rule = "Within this project root, Codex is preapproved to create and edit project files needed for the work, including HTML, CSS, JS, Python, tests, docs, and local policy files."
 notes = "This is a project-local instruction for future Codex sessions. It does not grant broader filesystem permissions outside the project root."

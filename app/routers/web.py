@@ -18,6 +18,7 @@ from app.models import DailyTarget, ExerciseCheckIn, ExerciseGoal, Food, HealthG
 from app.schemas.foods import FoodCreate, FoodUpdate
 from app.schemas.logging import LogMealRequest, LogReviewItem
 from app.services.food_service import (
+    _source_payload_image_url,
     _food_image_url,
     create_food,
     effective_grams_per_serving,
@@ -354,6 +355,51 @@ def _external_candidate_payload(candidate: ExternalFoodCandidate) -> dict:
     payload = asdict(candidate)
     payload["raw_payload"] = payload.pop("raw_source_payload", None)
     return payload
+
+
+REVIEW_RAW_PAYLOAD_KEYS = {
+    "code",
+    "fdcId",
+    "description",
+    "product_name",
+    "brands",
+    "image_url",
+    "image_front_url",
+    "image_small_url",
+}
+
+
+def _slim_raw_payload(payload: dict | None) -> dict | None:
+    if not payload:
+        return None
+    return {key: payload[key] for key in REVIEW_RAW_PAYLOAD_KEYS if key in payload}
+
+
+def _review_candidate_payload(candidate) -> dict:
+    raw_payload = candidate.raw_payload or {}
+    raw_source_payload = raw_payload.get("raw_source_payload") if isinstance(raw_payload.get("raw_source_payload"), dict) else None
+    source_payload = raw_source_payload or raw_payload
+    image_url = raw_payload.get("image_url") or _source_payload_image_url(source_payload)
+    source_food_id = raw_payload.get("source_food_id") or source_payload.get("code") or source_payload.get("fdcId")
+    return {
+        "food_id": candidate.food_id,
+        "canonical_name": candidate.canonical_name,
+        "brand": candidate.brand,
+        "source": candidate.source,
+        "source_food_id": str(source_food_id) if source_food_id else None,
+        "confidence": candidate.confidence,
+        "strategy": candidate.strategy,
+        "serving_description": candidate.serving_description,
+        "grams_per_serving": candidate.grams_per_serving,
+        "calories": candidate.calories,
+        "protein_g": candidate.protein_g,
+        "carbs_g": candidate.carbs_g,
+        "fat_g": candidate.fat_g,
+        "fiber_g": candidate.fiber_g,
+        "net_carbs_g": candidate.net_carbs_g,
+        "image_url": image_url,
+        "raw_payload": _slim_raw_payload(source_payload),
+    }
 
 
 MEAL_OPTIONS = ["Breakfast", "Lunch", "Dinner", "Snack 1", "Snack 2", "Snack 3", "Supplements"]
@@ -1102,7 +1148,7 @@ def review_log_entry(
             "review": review,
             "candidate_json": json.dumps(
                 [
-                    [asdict(candidate) for candidate in item.candidates]
+                    [_review_candidate_payload(candidate) for candidate in item.candidates]
                     for item in review
                 ]
             ),

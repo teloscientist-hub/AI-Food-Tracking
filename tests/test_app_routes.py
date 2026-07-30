@@ -3,9 +3,16 @@ import json
 from datetime import UTC, date, datetime, timedelta
 
 from app.models import MealEntry, MealEntryItem, HealthMeasurement
-from app.routers.web import _goal_ring_progress, _goal_ring_segments, _macro_pie_progress, _week_axis_for_metric
+from app.routers.web import (
+    _goal_ring_progress,
+    _goal_ring_segments,
+    _macro_pie_progress,
+    _review_candidate_payload,
+    _week_axis_for_metric,
+)
 from app.schemas.foods import FoodCreate
 from app.services.food_service import create_food
+from app.services.resolution import ResolutionCandidate
 from app.services.usda_client import ExternalFoodCandidate
 
 
@@ -759,6 +766,47 @@ def test_dashboard_week_panel_renders_goal_based_axis_labels(client) -> None:
     assert 'class="week-axis"' in response.text
     assert ">500<" in response.text
     assert ">1000<" in response.text
+
+
+def test_review_candidate_payload_strips_large_raw_source_payload() -> None:
+    candidate = ResolutionCandidate(
+        food_id=None,
+        canonical_name="Pure Protein Shake",
+        brand="Pure Protein",
+        source="openfoodfacts",
+        confidence=0.94,
+        strategy="off_search",
+        serving_description="1 bottle",
+        grams_per_serving=325.0,
+        calories=140.0,
+        protein_g=30.0,
+        carbs_g=6.0,
+        fat_g=2.0,
+        fiber_g=4.0,
+        net_carbs_g=2.0,
+        raw_payload={
+            "source_food_id": "pp-shake-1",
+            "raw_source_payload": {
+                "code": "pp-shake-1",
+                "product_name": "Pure Protein Shake",
+                "image_front_url": "https://example.com/shake.png",
+                "large_unused_field": "x" * (1024 * 1024),
+            },
+        },
+    )
+
+    payload = _review_candidate_payload(candidate)
+    serialized = json.dumps(payload)
+
+    assert len(serialized) < 4096
+    assert payload["source_food_id"] == "pp-shake-1"
+    assert payload["image_url"] == "https://example.com/shake.png"
+    assert payload["raw_payload"] == {
+        "code": "pp-shake-1",
+        "product_name": "Pure Protein Shake",
+        "image_front_url": "https://example.com/shake.png",
+    }
+    assert "large_unused_field" not in serialized
 
 
 def test_food_library_custom_source_shows_local_catalog_only(client, session) -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_DOWN, InvalidOperation
 
 
 KNOWN_UNITS = {
@@ -58,7 +59,45 @@ NUMBER_WORDS = {
     "ten": 10.0,
 }
 
+FRACTION_DENOMINATOR_WORDS = {
+    "half": 2.0,
+    "halves": 2.0,
+    "third": 3.0,
+    "thirds": 3.0,
+    "fourth": 4.0,
+    "fourths": 4.0,
+    "quarter": 4.0,
+    "quarters": 4.0,
+    "fifth": 5.0,
+    "fifths": 5.0,
+    "sixth": 6.0,
+    "sixths": 6.0,
+    "seventh": 7.0,
+    "sevenths": 7.0,
+    "eighth": 8.0,
+    "eighths": 8.0,
+    "ninth": 9.0,
+    "ninths": 9.0,
+    "tenth": 10.0,
+    "tenths": 10.0,
+    "eleventh": 11.0,
+    "elevenths": 11.0,
+    "twelfth": 12.0,
+    "twelfths": 12.0,
+    "sixteenth": 16.0,
+    "sixteenths": 16.0,
+    "twenty-fourth": 24.0,
+    "twenty-fourths": 24.0,
+    "twenty fourth": 24.0,
+    "twenty fourths": 24.0,
+    "thirty-second": 32.0,
+    "thirty-seconds": 32.0,
+    "thirty second": 32.0,
+    "thirty seconds": 32.0,
+}
+
 FILLER_TOKENS = {"of", "a", "an"}
+QUANTITY_DECIMAL_PLACES = Decimal("0.001")
 
 
 @dataclass(slots=True)
@@ -76,6 +115,25 @@ def normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", lowered).strip()
 
 
+def truncate_quantity(value: float) -> float:
+    try:
+        decimal_value = Decimal(str(value))
+    except InvalidOperation:
+        return value
+    return float(decimal_value.quantize(QUANTITY_DECIMAL_PLACES, rounding=ROUND_DOWN))
+
+
+def parse_fraction_quantity(numerator: str, denominator: str) -> float | None:
+    try:
+        numerator_value = Decimal(numerator)
+        denominator_value = Decimal(denominator)
+        if denominator_value == 0:
+            return None
+        return float((numerator_value / denominator_value).quantize(QUANTITY_DECIMAL_PLACES, rounding=ROUND_DOWN))
+    except (InvalidOperation, ValueError):
+        return None
+
+
 def strip_leading_bullets(value: str) -> str:
     return re.sub(r"^\s*[-*•]+\s*", "", value).strip()
 
@@ -87,8 +145,8 @@ def parse_quantity(token: str) -> float | None:
     if "/" in cleaned:
         try:
             left, right = cleaned.split("/", 1)
-            return float(left) / float(right)
-        except (ValueError, ZeroDivisionError):
+            return parse_fraction_quantity(left, right)
+        except ValueError:
             return None
     try:
         return float(cleaned)
@@ -132,6 +190,20 @@ def parse_food_phrase(segment: str) -> ParsedFoodItem:
     if quantity is not None:
         quantity_text = tokens[0]
         start_idx = 1
+        if start_idx < len(tokens):
+            denominator = FRACTION_DENOMINATOR_WORDS.get(tokens[start_idx].lower())
+            if denominator and tokens[0].lower() in NUMBER_WORDS:
+                quantity = truncate_quantity(NUMBER_WORDS[tokens[0].lower()] / denominator)
+                quantity_text = " ".join(tokens[: start_idx + 1])
+                start_idx += 1
+            elif start_idx + 1 < len(tokens):
+                compound_denominator = FRACTION_DENOMINATOR_WORDS.get(
+                    f"{tokens[start_idx].lower()} {tokens[start_idx + 1].lower()}"
+                )
+                if compound_denominator and tokens[0].lower() in NUMBER_WORDS:
+                    quantity = truncate_quantity(NUMBER_WORDS[tokens[0].lower()] / compound_denominator)
+                    quantity_text = " ".join(tokens[: start_idx + 2])
+                    start_idx += 2
         while start_idx < len(tokens) and tokens[start_idx].lower() in FILLER_TOKENS:
             start_idx += 1
         if start_idx < len(tokens):

@@ -59,7 +59,7 @@ def test_parse_entry_handles_spelled_numbers_and_phrase_cleanup() -> None:
     assert len(items) == 4
     assert items[0].quantity == 5
     assert items[0].phrase == "eggs"
-    assert items[1].quantity == 1 / 32
+    assert items[1].quantity == 0.031
     assert items[1].unit == "stick"
     assert items[1].phrase == "butter"
     assert items[2].phrase == "ratio 25 g blueberry probiotic yogurt"
@@ -80,3 +80,22 @@ def test_parse_entry_handles_brand_phrase_and_compound_weight_token() -> None:
     assert items[2].quantity == 5.0
     assert items[2].unit == "oz"
     assert items[2].phrase == "banana"
+
+
+def test_parse_entry_truncates_fraction_quantities_to_three_decimals() -> None:
+    items = parse_entry("1/24 of a stick of butter")
+
+    assert len(items) == 1
+    assert items[0].quantity == 0.041
+    assert items[0].unit == "stick"
+    assert items[0].phrase == "butter"
+
+
+def test_parse_entry_handles_spelled_fraction_quantities() -> None:
+    items = parse_entry("one twenty-fourth of a stick of butter")
+
+    assert len(items) == 1
+    assert items[0].quantity == 0.041
+    assert items[0].quantity_text == "one twenty-fourth"
+    assert items[0].unit == "stick"
+    assert items[0].phrase == "butter"
