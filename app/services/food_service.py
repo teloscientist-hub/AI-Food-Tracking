@@ -522,8 +522,19 @@ def search_foods(session: Session, query: str | None = None, source: str | None 
         stmt = stmt.where(Food.source == source)
     if query:
         normalized = f"%{normalize_text(query)}%"
+        brand_query = f"%{query}%"
         stmt = stmt.where(
-            or_(Food.normalized_name.like(normalized), Food.brand.like(f"%{query}%"))
+            Food.id.in_(
+                select(Food.id)
+                .outerjoin(FoodAlias, FoodAlias.food_id == Food.id)
+                .where(
+                    or_(
+                        Food.normalized_name.like(normalized),
+                        Food.brand.like(brand_query),
+                        FoodAlias.normalized_phrase.like(normalized),
+                    )
+                )
+            )
         )
     return session.scalars(stmt.order_by(Food.source, Food.canonical_name)).all()
 

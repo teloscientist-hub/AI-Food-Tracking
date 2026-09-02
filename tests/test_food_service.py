@@ -323,6 +323,30 @@ def test_search_foods_filters_by_query_and_source(session) -> None:
     assert results[0].canonical_name == "Premier Protein Cafe Latte"
 
 
+def test_search_foods_matches_aliases(session) -> None:
+    create_food(
+        session,
+        FoodCreate(
+            canonical_name="Aidells Chicken and Apple Sausage",
+            brand="Aidells",
+            serving_description="1 link (90g)",
+            grams_per_serving=90,
+            calories=170,
+            protein_g=13,
+            carbs_g=4,
+            fat_g=12,
+            fiber_g=1,
+            net_carbs_g=3,
+            aliases=["Idels Chicken Apple Sausage"],
+        ),
+    )
+
+    results = search_foods(session, query="idels chicken apple sausage", source="custom")
+
+    assert len(results) == 1
+    assert results[0].canonical_name == "Aidells Chicken and Apple Sausage"
+
+
 def test_create_and_update_food_store_uploaded_image_bytes(session) -> None:
     food = create_food(
         session,

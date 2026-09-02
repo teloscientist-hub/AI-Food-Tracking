@@ -286,6 +286,7 @@ input, select, textarea {
 .log-picker-panel {
   display: flex;
   flex-direction: column;
+  container-type: inline-size;
 }
 .log-picker-panel .panel-header {
   margin-bottom: 12px;
@@ -733,6 +734,62 @@ input, select, textarea {
   gap: 16px;
   width: auto;
   justify-items: end;
+}
+
+.picker-page-panel {
+  container-type: inline-size;
+}
+
+@container (max-width: 820px) {
+  .log-picker-panel .picker-row.picker-row-inline,
+  .picker-page-panel .picker-row.picker-row-add {
+    grid-template-columns: 1fr;
+  }
+
+  .log-picker-panel .picker-row-form,
+  .picker-page-panel .picker-row-form {
+    grid-template-columns: 56px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .log-picker-panel .picker-right-cluster,
+  .picker-page-panel .picker-right-cluster {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-auto-flow: row;
+    align-items: center;
+    justify-self: stretch;
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+    white-space: normal;
+  }
+
+  .log-picker-panel .picker-macros,
+  .log-picker-panel .compact-macros,
+  .picker-page-panel .picker-macros {
+    grid-auto-flow: row;
+    grid-auto-columns: unset;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    justify-items: stretch;
+    width: 100%;
+    gap: 12px;
+  }
+
+  .log-picker-panel .picker-macro-cell,
+  .picker-page-panel .picker-macro-cell {
+    min-width: 0;
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+
+@container (max-width: 560px) {
+  .log-picker-panel .picker-macros,
+  .log-picker-panel .compact-macros,
+  .picker-page-panel .picker-macros {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .icon-add-button {
